@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from alpaca.trading.client import TradingClient
 
@@ -30,11 +31,22 @@ def main():
     print(f"Skipped:  {len(summary.skipped)}")
 
     run_dict = {
-        "analysed": summary.analysed,
-        "trades":   summary.trades,
-        "skipped":  summary.skipped,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
+        "analysed":  summary.analysed,
+        "trades":    summary.trades,
+        "skipped":   summary.skipped,
     }
     analyses = append_run(run_dict)
+
+    analyses_flat = []
+    for run in analyses:
+        ts = run.get("timestamp", "")
+        for t in run.get("trades", []):
+            analyses_flat.append({"timestamp": ts, "ticker": t["ticker"],
+                                   "action": "BUY", "traded": True, "reasoning": t.get("reasoning", "")})
+        for s in run.get("skipped", []):
+            analyses_flat.append({"timestamp": ts, "ticker": s["ticker"],
+                                   "action": s.get("reason", "SKIP"), "traded": False, "reasoning": s.get("reasoning", "")})
 
     alpaca   = TradingClient(CONFIG["alpaca_key"], CONFIG["alpaca_secret"], paper=True)
     account  = alpaca.get_account()
@@ -63,7 +75,7 @@ def main():
         "win_rate": 0.0,  # calculé par l'outil de supervision (phase 2)
     }
 
-    html = render_dashboard(positions=positions_data, analyses=analyses[-50:], portfolio=portfolio)
+    html = render_dashboard(positions=positions_data, analyses=analyses_flat[-50:], portfolio=portfolio)
 
     gist_id = os.environ.get("GIST_ID")
     token   = os.environ.get("GITHUB_TOKEN")

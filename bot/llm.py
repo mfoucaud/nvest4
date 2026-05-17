@@ -1,8 +1,10 @@
 import json
+import time
 from dataclasses import dataclass
 from enum import Enum
 
 from google import genai
+from google.genai.errors import ClientError
 
 MODEL = "gemini-2.0-flash"
 
@@ -52,19 +54,22 @@ def get_decision(
         capital=capital,
     )
 
-    try:
-        raw  = client.models.generate_content(model=MODEL, contents=prompt).text
-        data = json.loads(raw)
-        return LLMDecision(
-            action=Action(data["action"]),
-            ticker=data["ticker"],
-            confidence=float(data["confidence"]),
-            reasoning=data["reasoning"],
-        )
-    except Exception as e:
-        return LLMDecision(
-            action=Action.HOLD,
-            ticker=ticker,
-            confidence=0.0,
-            reasoning=f"Impossible de parse la réponse Gemini : {e}",
-        )
+    for attempt in range(3):
+        try:
+            raw  = client.models.generate_content(model=MODEL, contents=prompt).text
+            data = json.loads(raw)
+            return LLMDecision(
+                action=Action(data["action"]),
+                ticker=data["ticker"],
+                confidence=float(data["confidence"]),
+                reasoning=data["reasoning"],
+            )
+        except ClientError as e:
+            if "429" in str(e) and attempt < 2:
+                time.sleep(30 * (attempt + 1))
+                continue
+            return LLMDecision(action=Action.HOLD, ticker=ticker, confidence=0.0,
+                               reasoning=f"Gemini API error : {e}")
+        except Exception as e:
+            return LLMDecision(action=Action.HOLD, ticker=ticker, confidence=0.0,
+                               reasoning=f"Impossible de parser la réponse Gemini : {e}")

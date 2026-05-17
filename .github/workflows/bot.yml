@@ -41,10 +41,3 @@ jobs:
           GIST_ID:                 ${{ secrets.GIST_ID }}
         run: python main.py
 
-      - name: Commit analyses.json
-        run: |
-          git config user.name  "nvest4-bot"
-          git config user.email "bot@nvest4"
-          git add analyses.json
-          git diff --staged --quiet || git commit -m "chore: analyses run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          git push

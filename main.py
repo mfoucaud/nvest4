@@ -5,7 +5,7 @@ from alpaca.trading.client import TradingClient
 
 from bot.runner import run_cycle
 from bot.dashboard import render_dashboard
-from bot.persistence import append_run, load_analyses, push_to_gist
+from bot.persistence import append_run, load_from_gist, push_to_gist
 
 load_dotenv()
 
@@ -30,13 +30,17 @@ def main():
     print(f"Trades:   {len(summary.trades)}")
     print(f"Skipped:  {len(summary.skipped)}")
 
+    gist_id = os.environ.get("GIST_ID")
+    token   = os.environ.get("GITHUB_TOKEN")
+
+    prior_analyses = load_from_gist(gist_id, token) if (gist_id and token) else None
+
     run_dict = {
-        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
-        "analysed":  summary.analysed,
-        "trades":    summary.trades,
-        "skipped":   summary.skipped,
+        "analysed": summary.analysed,
+        "trades":   summary.trades,
+        "skipped":  summary.skipped,
     }
-    analyses = append_run(run_dict)
+    analyses = append_run(run_dict, analyses=prior_analyses)
 
     analyses_flat = []
     for run in analyses:
@@ -77,10 +81,8 @@ def main():
 
     html = render_dashboard(positions=positions_data, analyses=analyses_flat[-50:], portfolio=portfolio)
 
-    gist_id = os.environ.get("GIST_ID")
-    token   = os.environ.get("GITHUB_TOKEN")
     if gist_id and token:
-        push_to_gist(html, gist_id, token)
+        push_to_gist(html, analyses, gist_id, token)
         print("Dashboard pushed to Gist.")
     else:
         with open("dashboard.html", "w") as f:

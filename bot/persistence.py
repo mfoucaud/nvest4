@@ -16,16 +16,35 @@ def save_analyses(analyses: list[dict], path: str = "analyses.json") -> None:
         json.dump(analyses, f, indent=2)
 
 
-def append_run(summary_dict: dict, path: str = "analyses.json") -> list[dict]:
-    analyses = load_analyses(path)
-    analyses.append({**summary_dict, "timestamp": datetime.now(timezone.utc).isoformat()})
+def load_from_gist(gist_id: str, github_token: str) -> list[dict]:
+    resp = requests.get(
+        f"https://api.github.com/gists/{gist_id}",
+        headers={"Authorization": f"token {github_token}"},
+    )
+    if not resp.ok:
+        return []
+    files = resp.json().get("files", {})
+    if "analyses.json" not in files:
+        return []
+    raw = files["analyses.json"].get("content", "[]")
+    return json.loads(raw)
+
+
+def append_run(summary_dict: dict, analyses: list[dict] | None = None,
+               path: str = "analyses.json") -> list[dict]:
+    if analyses is None:
+        analyses = load_analyses(path)
+    analyses.append({**summary_dict, "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")})
     save_analyses(analyses, path)
     return analyses
 
 
-def push_to_gist(html: str, gist_id: str, github_token: str) -> None:
+def push_to_gist(html: str, analyses: list[dict], gist_id: str, github_token: str) -> None:
     requests.patch(
         f"https://api.github.com/gists/{gist_id}",
         headers={"Authorization": f"token {github_token}"},
-        json={"files": {"dashboard.html": {"content": html}}},
+        json={"files": {
+            "dashboard.html":  {"content": html},
+            "analyses.json":   {"content": json.dumps(analyses, indent=2)},
+        }},
     ).raise_for_status()

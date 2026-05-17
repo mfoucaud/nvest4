@@ -1,0 +1,7 @@
+alpaca-py
+yfinance
+pandas-ta
+google-genai
+requests
+python-dotenv
+pytest

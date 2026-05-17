@@ -1,0 +1,47 @@
+name: nvest4-bot
+
+on:
+  schedule:
+    # Toutes les heures de 9h30 à 15h30 ET (13h30-19h30 UTC), lun-ven
+    - cron: "30 13,14,15,16,17,18,19 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Raison du déclenchement manuel"
+        required: false
+        default: "manual"
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        env:
+          ALPACA_API_KEY:          ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET:       ${{ secrets.ALPACA_API_SECRET }}
+          GOOGLEAI_STUDIO_API_KEY: ${{ secrets.GOOGLEAI_STUDIO_API_KEY }}
+          GITHUB_TOKEN:            ${{ secrets.GITHUB_TOKEN }}
+          GIST_ID:                 ${{ secrets.GIST_ID }}
+        run: python main.py
+
+      - name: Commit analyses.json
+        run: |
+          git config user.name  "nvest4-bot"
+          git config user.email "bot@nvest4"
+          git add analyses.json
+          git diff --staged --quiet || git commit -m "chore: analyses run $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push

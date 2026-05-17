@@ -36,6 +36,7 @@ def run_cycle(watchlist: list[str], config: dict) -> RunSummary:
 
     for signal in signals:
         ticker   = signal.ticker
+        print(f"[runner] analysing {ticker}...")
         summary.analysed.append(ticker)
 
         news_items = classify_news(ticker)

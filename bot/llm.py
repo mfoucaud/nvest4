@@ -66,7 +66,9 @@ def get_decision(
             )
         except ClientError as e:
             if "429" in str(e) and attempt < 2:
-                time.sleep(30 * (attempt + 1))
+                wait = 15 * (attempt + 1)
+                print(f"[llm] 429 rate limit {ticker}, retry in {wait}s (attempt {attempt+1})")
+                time.sleep(wait)
                 continue
             return LLMDecision(action=Action.HOLD, ticker=ticker, confidence=0.0,
                                reasoning=f"Gemini API error : {e}")

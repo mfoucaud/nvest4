@@ -37,7 +37,7 @@ jobs:
           ALPACA_API_KEY:          ${{ secrets.ALPACA_API_KEY }}
           ALPACA_API_SECRET:       ${{ secrets.ALPACA_API_SECRET }}
           GOOGLEAI_STUDIO_API_KEY: ${{ secrets.GOOGLEAI_STUDIO_API_KEY }}
-          GITHUB_TOKEN:            ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN:            ${{ secrets.GH_PAT }}
           GIST_ID:                 ${{ secrets.GIST_ID }}
         run: python main.py
 

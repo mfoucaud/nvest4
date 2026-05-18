@@ -12,7 +12,7 @@ MODEL = "gemini-2.0-flash"
 
 class GeminiProvider:
     def __init__(self, api_key: str, model: str = MODEL):
-        self.api_key = api_key
+        self.client = genai.Client(api_key=api_key)
         self.model = model
 
     def get_decision(
@@ -23,7 +23,6 @@ class GeminiProvider:
         open_positions: list[str],
         capital:        float,
     ) -> LLMDecision:
-        client = genai.Client(api_key=self.api_key)
         prompt = PROMPT_TEMPLATE.format(
             ticker=ticker,
             signals=", ".join(signals) or "aucun",
@@ -34,7 +33,7 @@ class GeminiProvider:
 
         for attempt in range(3):
             try:
-                raw  = client.models.generate_content(model=self.model, contents=prompt).text
+                raw  = self.client.models.generate_content(model=self.model, contents=prompt).text
                 data = json.loads(raw)
                 return LLMDecision(
                     action=Action(data["action"]),

@@ -19,7 +19,7 @@ def render_dashboard(positions: list[dict], analyses: list[dict], portfolio: dic
         </tr>"""
 
     analyses_rows = ""
-    for a in analyses:
+    for a in reversed(analyses):
         analyses_rows += f"""
         <tr>
           <td>{a.get('timestamp', '')}</td>
@@ -63,9 +63,15 @@ def render_dashboard(positions: list[dict], analyses: list[dict], portfolio: dic
   </table>
 
   <h2>Historique des analyses</h2>
-  <table>
-    <tr><th>Timestamp</th><th>Ticker</th><th>Action</th><th>Tradé</th><th>Reasoning</th></tr>
-    {analyses_rows or '<tr><td colspan="5">Aucune analyse</td></tr>'}
-  </table>
+  <div style="max-height: 400px; overflow-y: auto; border: 1px solid #333;">
+    <table>
+      <thead style="position: sticky; top: 0;">
+        <tr><th>Timestamp</th><th>Ticker</th><th>Action</th><th>Tradé</th><th>Reasoning</th></tr>
+      </thead>
+      <tbody>
+        {analyses_rows or '<tr><td colspan="5">Aucune analyse</td></tr>'}
+      </tbody>
+    </table>
+  </div>
 </body>
 </html>"""

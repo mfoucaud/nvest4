@@ -104,3 +104,59 @@ class TestFactory:
         with patch("bot.llm_gemini.genai.Client"):
             provider = get_llm_provider({"llm_provider": "gemini", "gemini_api_key": "k"})
         assert isinstance(provider, LLMProvider)
+
+
+class TestGroqProvider:
+    def _mock_groq_client(self, action="BUY", confidence=0.85, reasoning="Strong signal", ticker="AAPL"):
+        response_json = json.dumps({
+            "action":     action,
+            "ticker":     ticker,
+            "confidence": confidence,
+            "reasoning":  reasoning,
+        })
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value.choices[0].message.content = response_json
+        return mock_client
+
+    def test_returns_buy_decision(self):
+        from bot.llm_groq import GroqProvider
+        mock_client = self._mock_groq_client("BUY")
+        with patch("bot.llm_groq.Groq", return_value=mock_client):
+            provider = GroqProvider(api_key="fake-key")
+            decision = provider.get_decision(
+                ticker="AAPL", signals=["RSI_OVERSOLD(30.0)"],
+                headlines=["Apple beats estimates"], open_positions=[], capital=10_000.0,
+            )
+        assert decision.action == Action.BUY
+        assert decision.ticker == "AAPL"
+
+    def test_returns_hold_on_malformed_response(self):
+        from bot.llm_groq import GroqProvider
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "not json"
+        with patch("bot.llm_groq.Groq", return_value=mock_client):
+            provider = GroqProvider(api_key="fake-key")
+            decision = provider.get_decision(
+                ticker="AAPL", signals=[], headlines=[], open_positions=[], capital=10_000.0,
+            )
+        assert decision.action == Action.HOLD
+
+    def test_prompt_includes_ticker_and_signals(self):
+        from bot.llm_groq import GroqProvider
+        mock_client = self._mock_groq_client(action="BUY")
+        with patch("bot.llm_groq.Groq", return_value=mock_client):
+            provider = GroqProvider(api_key="fake-key")
+            provider.get_decision(
+                ticker="NVDA", signals=["EMA_CROSS_UP"],
+                headlines=[], open_positions=[], capital=10_000.0,
+            )
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        prompt = call_kwargs["messages"][0]["content"]
+        assert "NVDA" in prompt
+        assert "EMA_CROSS_UP" in prompt
+
+    def test_satisfies_llm_provider_protocol(self):
+        from bot.llm_groq import GroqProvider
+        with patch("bot.llm_groq.Groq"):
+            provider = GroqProvider(api_key="fake-key")
+        assert isinstance(provider, LLMProvider)

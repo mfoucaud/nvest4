@@ -2,6 +2,7 @@ alpaca-py
 yfinance
 pandas-ta
 google-genai
+groq
 requests
 python-dotenv
 pytest

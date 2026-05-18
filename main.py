@@ -16,7 +16,9 @@ WATCHLIST = [
 ]
 
 CONFIG = {
-    "api_key":       os.environ["GOOGLEAI_STUDIO_API_KEY"],
+    "llm_provider":  os.environ.get("LLM_PROVIDER", "groq"),
+    "groq_api_key":  os.environ.get("GROQ_API_KEY", ""),
+    "gemini_api_key": os.environ.get("GOOGLEAI_STUDIO_API_KEY", ""),
     "alpaca_key":    os.environ["ALPACA_API_KEY"],
     "alpaca_secret": os.environ["ALPACA_API_SECRET"],
 }

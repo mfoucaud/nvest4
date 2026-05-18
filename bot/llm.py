@@ -1,6 +1,4 @@
 # bot/llm.py
-import json
-import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol, runtime_checkable
@@ -47,11 +45,17 @@ class LLMProvider(Protocol):
 
 
 def get_llm_provider(config: dict) -> LLMProvider:
-    provider = config.get("llm_provider", "groq")
+    provider = config.get("llm_provider", "groq").lower()
     if provider == "groq":
+        api_key = config.get("groq_api_key")
+        if not api_key:
+            raise ValueError("Missing required config: groq_api_key")
         from bot.llm_groq import GroqProvider
-        return GroqProvider(api_key=config["groq_api_key"])
+        return GroqProvider(api_key=api_key)
     if provider == "gemini":
+        api_key = config.get("gemini_api_key")
+        if not api_key:
+            raise ValueError("Missing required config: gemini_api_key")
         from bot.llm_gemini import GeminiProvider
-        return GeminiProvider(api_key=config["gemini_api_key"])
-    raise ValueError(f"Unknown LLM provider: {provider}")
+        return GeminiProvider(api_key=api_key)
+    raise ValueError(f"Unknown LLM provider: {provider}. Valid options: groq, gemini")

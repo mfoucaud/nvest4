@@ -39,13 +39,19 @@ def execute_order(
             f"{ticker}: BUY non filled après {poll_timeout}s — ordre annulé"
         )
 
-    stop_order = client.submit_order(TrailingStopOrderRequest(
-        symbol=ticker,
-        qty=qty,
-        side=OrderSide.SELL,
-        time_in_force=TimeInForce.GTC,
-        trail_percent=trail_percent,
-    ))
+    try:
+        stop_order = client.submit_order(TrailingStopOrderRequest(
+            symbol=ticker,
+            qty=qty,
+            side=OrderSide.SELL,
+            time_in_force=TimeInForce.GTC,
+            trail_percent=trail_percent,
+        ))
+    except Exception as e:
+        client.close_position(ticker)
+        raise RuntimeError(
+            f"{ticker}: trailing stop refusé ({e}) — position liquidée"
+        ) from e
 
     return TradeResult(
         ticker=ticker,

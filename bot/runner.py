@@ -68,7 +68,13 @@ def run_cycle(watchlist: list[str], config: dict) -> RunSummary:
             summary.skipped.append({"ticker": ticker, "reason": order.rejection.value})
             continue
 
-        result = execute_order(alpaca, ticker=ticker, qty=order.qty, trail_percent=5.0)
+        try:
+            result = execute_order(alpaca, ticker=ticker, qty=order.qty, trail_percent=5.0)
+        except TimeoutError as e:
+            print(f"[runner] {e}")
+            summary.skipped.append({"ticker": ticker, "reason": "TIMEOUT", "reasoning": str(e)})
+            continue
+
         summary.trades.append({
             "ticker":    ticker,
             "qty":       order.qty,

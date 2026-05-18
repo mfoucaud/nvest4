@@ -36,6 +36,7 @@ jobs:
         env:
           ALPACA_API_KEY:          ${{ secrets.ALPACA_API_KEY }}
           ALPACA_API_SECRET:       ${{ secrets.ALPACA_API_SECRET }}
+          GROQ_API_KEY:            ${{ secrets.GROQ_API_KEY }}
           GOOGLEAI_STUDIO_API_KEY: ${{ secrets.GOOGLEAI_STUDIO_API_KEY }}
           GITHUB_TOKEN:            ${{ secrets.GH_PAT }}
           GIST_ID:                 ${{ secrets.GIST_ID }}

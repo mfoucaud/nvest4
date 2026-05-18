@@ -50,6 +50,6 @@ def execute_order(
     return TradeResult(
         ticker=ticker,
         success=True,
-        buy_id=buy_order.id,
-        stop_id=stop_order.id,
+        buy_id=str(buy_order.id),
+        stop_id=str(stop_order.id),
     )

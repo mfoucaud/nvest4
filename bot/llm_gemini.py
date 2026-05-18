@@ -42,11 +42,15 @@ class GeminiProvider:
                     reasoning=data["reasoning"],
                 )
             except ClientError as e:
-                if "429" in str(e) and attempt < 2:
+                err_str = str(e)
+                is_daily_quota = "PerDay" in err_str or "per_day" in err_str.lower()
+                if "429" in err_str and not is_daily_quota and attempt < 2:
                     wait = 15 * (attempt + 1)
                     print(f"[gemini] 429 rate limit {ticker}, retry in {wait}s (attempt {attempt+1})")
                     time.sleep(wait)
                     continue
+                if is_daily_quota:
+                    print(f"[gemini] daily quota exhausted for {ticker}, skipping retries")
                 return LLMDecision(action=Action.HOLD, ticker=ticker, confidence=0.0,
                                    reasoning=f"Gemini API error : {e}")
             except Exception as e:

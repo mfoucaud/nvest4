@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 
-MAX_POSITIONS       = 5
+MAX_POSITIONS       = 10
 POSITION_PCT        = 0.10   # 10% du capital par position
 STOP_LOSS_PCT       = 0.05   # stop loss à -5%
 

@@ -172,12 +172,16 @@ def enrich_with_analyses(trades: list[dict], analyses_path: str) -> list[dict]:
     # Enrichissement par ticker (fallback sans buy_id dans les trades corrélés)
     for trade in trades:
         for run in analyses:
+            found = False
             for at in run.get("trades", []):
                 if at.get("ticker") != trade["ticker"]:
                     continue
                 reasoning = at.get("reasoning", "")
                 if reasoning:
                     trade["reasoning"] = reasoning
+                    found = True
                     break
+            if found:
+                break
 
     return trades

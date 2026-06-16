@@ -30,7 +30,7 @@ class GeminiProvider:
     ) -> LLMDecision:
         recent_prices = recent_prices or []
         price_trend = 0.0
-        if len(recent_prices) >= 2:
+        if len(recent_prices) >= 2 and recent_prices[0] != 0:
             price_trend = (recent_prices[-1] - recent_prices[0]) / recent_prices[0] * 100
 
         prompt = PROMPT_TEMPLATE.format(

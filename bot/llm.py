@@ -59,11 +59,11 @@ class LLMProvider(Protocol):
         headlines:      list[str],
         open_positions: list[str],
         capital:        float,
-        market_regime:  str,
-        spy_perf_5d:    float,
-        recent_prices:  list[float],
-        atr:            float,
-        trail_pct:      float,
+        market_regime:  str = "NEUTRAL",
+        spy_perf_5d:    float = 0.0,
+        recent_prices:  list[float] | None = None,
+        atr:            float = 0.0,
+        trail_pct:      float = 5.0,
     ) -> LLMDecision: ...
 
 

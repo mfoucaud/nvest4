@@ -6,8 +6,13 @@ import csv
 import json
 import os
 
+import colorama
 from colorama import Fore, Style
+from dotenv import load_dotenv
 from tabulate import tabulate
+
+colorama.init(autoreset=True)
+load_dotenv()
 
 
 # ── Corrélation ──────────────────────────────────────────────────────────────
@@ -295,10 +300,10 @@ def main() -> None:
     parser.add_argument("--analyses", type=str,  default=None, help="Chemin vers analyses.json pour enrichissement")
     args = parser.parse_args()
 
-    api_key    = os.getenv("ALPACA_KEY")
-    api_secret = os.getenv("ALPACA_SECRET")
+    api_key    = os.getenv("ALPACA_API_KEY")
+    api_secret = os.getenv("ALPACA_API_SECRET")
     if not api_key or not api_secret:
-        print(f"{Fore.RED}[erreur] Variables ALPACA_KEY et ALPACA_SECRET requises.{Style.RESET_ALL}")
+        print(f"{Fore.RED}[erreur] Variables ALPACA_API_KEY et ALPACA_API_SECRET requises.{Style.RESET_ALL}")
         raise SystemExit(1)
 
     try:

@@ -9,6 +9,24 @@ def _parse_dt(s: str) -> datetime:
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
+def _make_orphan(ticker: str, pending: dict) -> dict:
+    entry_o = pending["order"]
+    return {
+        "ticker":       ticker,
+        "direction":    pending["direction"],
+        "entry_price":  float(entry_o["filled_avg_price"]),
+        "exit_price":   None,
+        "qty":          float(entry_o["filled_qty"]),
+        "pnl":          None,
+        "duration_min": None,
+        "win":          None,
+        "close_type":   "orphan",
+        "entry_time":   entry_o["filled_at"],
+        "exit_time":    None,
+        "reasoning":    "",
+    }
+
+
 def correlate_orders(orders: list[dict]) -> list[dict]:
     """
     Corrèle les ordres d'entrée avec leurs ordres de sortie par ticker.
@@ -19,6 +37,8 @@ def correlate_orders(orders: list[dict]) -> list[dict]:
     Retourne une liste de trades avec les champs :
     ticker, direction, entry_price, exit_price, qty, pnl, duration_min,
     win, close_type, entry_time, exit_time
+
+    Note : les fills partiels ne sont pas supportés (qty entry == qty exit supposé).
     """
     by_ticker: dict[str, list[dict]] = defaultdict(list)
     for o in orders:
@@ -43,7 +63,10 @@ def correlate_orders(orders: list[dict]) -> list[dict]:
                     pending_entry = {"direction": "LONG", "order": o}
                 elif side == "sell" and order_type == "market":
                     pending_entry = {"direction": "SHORT", "order": o}
-                # SELL trailing_stop sans entrée ouverte → ignorer (résidu)
+                elif side == "sell" and order_type == "trailing_stop":
+                    print(f"[warn] {ticker}: SELL trailing_stop sans entrée ouverte — ignoré (résidu ou position externe)")
+                elif side == "buy" and order_type == "trailing_stop":
+                    print(f"[warn] {ticker}: BUY trailing_stop sans entrée SHORT ouverte — ignoré (résidu ou position externe)")
             else:
                 direction = pending_entry["direction"]
                 entry_o = pending_entry["order"]
@@ -83,21 +106,7 @@ def correlate_orders(orders: list[dict]) -> list[dict]:
                     pending_entry = None
                 else:
                     # Nouvel ordre d'entrée dans le même sens → on clôt l'ancien comme orphelin
-                    entry_o2 = pending_entry["order"]
-                    trades.append({
-                        "ticker":       ticker,
-                        "direction":    pending_entry["direction"],
-                        "entry_price":  float(entry_o2["filled_avg_price"]),
-                        "exit_price":   None,
-                        "qty":          float(entry_o2["filled_qty"]),
-                        "pnl":          None,
-                        "duration_min": None,
-                        "win":          None,
-                        "close_type":   "orphan",
-                        "entry_time":   entry_o2["filled_at"],
-                        "exit_time":    None,
-                        "reasoning":    "",
-                    })
+                    trades.append(_make_orphan(ticker, pending_entry))
                     # Nouveau pending
                     if side == "buy" and order_type == "market":
                         pending_entry = {"direction": "LONG", "order": o}
@@ -108,21 +117,7 @@ def correlate_orders(orders: list[dict]) -> list[dict]:
 
         # Entrée sans sortie en fin de liste
         if pending_entry:
-            entry_o = pending_entry["order"]
-            trades.append({
-                "ticker":       ticker,
-                "direction":    pending_entry["direction"],
-                "entry_price":  float(entry_o["filled_avg_price"]),
-                "exit_price":   None,
-                "qty":          float(entry_o["filled_qty"]),
-                "pnl":          None,
-                "duration_min": None,
-                "win":          None,
-                "close_type":   "orphan",
-                "entry_time":   entry_o["filled_at"],
-                "exit_time":    None,
-                "reasoning":    "",
-            })
+            trades.append(_make_orphan(ticker, pending_entry))
 
     trades.sort(key=lambda t: t["entry_time"])
     return trades

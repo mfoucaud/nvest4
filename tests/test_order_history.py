@@ -86,3 +86,20 @@ def test_manual_close_detected():
     ]
     trades = correlate_orders(orders)
     assert trades[0]["close_type"] == "manual"
+
+
+def test_double_buy_first_becomes_orphan():
+    """Un second BUY market sans sortie du premier → le premier devient orphelin."""
+    orders = [
+        _order("buy", "market", 100.0, "2026-06-10T09:00:00Z"),
+        _order("buy", "market", 110.0, "2026-06-10T10:00:00Z"),  # nouveau LONG, pas une sortie
+        _order("sell", "trailing_stop", 115.0, "2026-06-10T11:00:00Z"),
+    ]
+    trades = correlate_orders(orders)
+    assert len(trades) == 2
+    orphan = next(t for t in trades if t["close_type"] == "orphan")
+    matched = next(t for t in trades if t["close_type"] == "trailing_stop")
+    assert orphan["entry_price"] == 100.0
+    assert orphan["pnl"] is None
+    assert matched["entry_price"] == 110.0
+    assert round(matched["pnl"], 2) == 50.0  # (115 - 110) * 10

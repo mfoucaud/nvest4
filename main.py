@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from alpaca.trading.client import TradingClient
@@ -12,9 +13,10 @@ from bot.persistence import append_run, load_from_gist, push_to_gist
 load_dotenv()
 
 WATCHLIST = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA",
-    "JPM", "BAC", "WMT", "JNJ", "PG", "XOM", "CVX", "KO",
-    "PEP", "DIS", "NFLX", "ADBE", "CRM",
+    # Momentum high-beta
+    "NVDA", "AMD", "SMCI", "PLTR", "COIN", "MSTR", "RDDT", "CRWD", "ANET", "UBER",
+    # Mega-caps momentum (conservés)
+    "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE",
 ]
 
 CONFIG = {
@@ -60,93 +62,130 @@ def main():
     account  = alpaca.get_account()
     positions = alpaca.get_all_positions()
 
-    # Build stop_id and entry data map from analyses
-    stop_id_map: dict[str, str] = {}
-    entry_map: dict[str, dict] = {}
+    # Reasoning map from analyses (best-effort enrichment)
+    reasoning_map: dict[str, str] = {}
     for run in analyses:
-        ts = run.get("timestamp", "")
         for trade in run.get("trades", []):
-            t = trade["ticker"]
-            stop_id_map[t] = trade.get("stop_id", "")
-            entry_map[t] = {
-                "entry_price": None,  # filled below from position
-                "qty":         trade.get("qty", 0),
-                "reasoning":   trade.get("reasoning", ""),
-                "timestamp":   ts,
-            }
+            reasoning_map[trade["ticker"]] = trade.get("reasoning", "")
 
     open_tickers = {p.symbol for p in positions}
 
+    # Fetch all orders from Alpaca (source of truth)
+    all_buy_orders = alpaca.get_orders(filter=GetOrdersRequest(
+        status=QueryOrderStatus.CLOSED,
+        side=OrderSide.BUY,
+        limit=200,
+    ))
+    all_sell_orders = alpaca.get_orders(filter=GetOrdersRequest(
+        status=QueryOrderStatus.CLOSED,
+        side=OrderSide.SELL,
+        limit=200,
+    ))
+
+    def _is_trailing_stop(order) -> bool:
+        return bool(order.trail_percent or order.trail_price)
+
+    filled_closed = [
+        o for o in all_buy_orders + all_sell_orders
+        if o.status == OrderStatus.FILLED and o.filled_avg_price
+    ]
+
+    # Long entries: market BUY filled
+    long_entries  = sorted(
+        [o for o in filled_closed if o.side == OrderSide.BUY  and not _is_trailing_stop(o)],
+        key=lambda x: x.filled_at,
+    )
+    # Long exits: trailing stop SELL filled
+    long_exits_by_ticker: dict[str, list] = defaultdict(list)
+    for o in sorted(
+        [o for o in filled_closed if o.side == OrderSide.SELL and _is_trailing_stop(o)],
+        key=lambda x: x.filled_at,
+    ):
+        long_exits_by_ticker[o.symbol].append(o)
+
+    # Short entries: market SELL filled
+    short_entries = sorted(
+        [o for o in filled_closed if o.side == OrderSide.SELL and not _is_trailing_stop(o)],
+        key=lambda x: x.filled_at,
+    )
+    # Short exits: trailing stop BUY filled
+    short_exits_by_ticker: dict[str, list] = defaultdict(list)
+    for o in sorted(
+        [o for o in filled_closed if o.side == OrderSide.BUY  and _is_trailing_stop(o)],
+        key=lambda x: x.filled_at,
+    ):
+        short_exits_by_ticker[o.symbol].append(o)
+
+    # Open stop orders — stop price for open positions
+    open_stops_long  = alpaca.get_orders(filter=GetOrdersRequest(
+        status=QueryOrderStatus.OPEN, side=OrderSide.SELL,
+    ))
+    open_stops_short = alpaca.get_orders(filter=GetOrdersRequest(
+        status=QueryOrderStatus.OPEN, side=OrderSide.BUY,
+    ))
+    stop_price_map: dict[str, float] = {}
+    for o in list(open_stops_long) + list(open_stops_short):
+        if not _is_trailing_stop(o):
+            continue
+        price = float(o.stop_price) if o.stop_price else (float(o.trail_price) if o.trail_price else None)
+        if price:
+            stop_price_map[o.symbol] = price
+
     positions_data = []
     for p in positions:
-        stop_price = None
-        sid = stop_id_map.get(p.symbol)
-        if sid:
-            try:
-                stop_order = alpaca.get_order_by_id(sid)
-                if stop_order.stop_price:
-                    stop_price = float(stop_order.stop_price)
-                elif stop_order.trail_price:
-                    stop_price = float(stop_order.trail_price)
-            except Exception:
-                pass
+        is_short = hasattr(p, "side") and str(p.side).lower() == "short"
         positions_data.append({
             "ticker":     p.symbol,
+            "direction":  "SHORT" if is_short else "LONG",
             "entry":      float(p.avg_entry_price),
             "current":    float(p.current_price),
-            "qty":        int(p.qty),
+            "qty":        abs(int(float(p.qty))),
             "pnl":        float(p.unrealized_pl),
             "pnl_pct":    float(p.unrealized_plpc) * 100,
-            "stop_price": stop_price,
-            "reasoning":  entry_map.get(p.symbol, {}).get("reasoning", ""),
+            "stop_price": stop_price_map.get(p.symbol),
+            "reasoning":  reasoning_map.get(p.symbol, ""),
         })
 
-    # Closed trades: in analyses but no longer in open positions
-    seen: set[str] = set()
-    closed_trades = []
-    for run in reversed(analyses):
-        ts = run.get("timestamp", "")
-        for trade in run.get("trades", []):
-            t = trade["ticker"]
-            if t in open_tickers or t in seen:
+    def _pair_trades(entries, exits_by_ticker, direction: str) -> list[dict]:
+        cursor: dict[str, int] = defaultdict(int)
+        result = []
+        for entry in entries:
+            ticker = entry.symbol
+            if ticker in open_tickers:
                 continue
-            seen.add(t)
-            qty = trade.get("qty", 0)
-            entry_price = None
-            exit_price = None
-            # Try to get entry fill price from closed buy order
-            bid = trade.get("buy_id")
-            if bid:
-                try:
-                    bo = alpaca.get_order_by_id(bid)
-                    if bo.filled_avg_price:
-                        entry_price = float(bo.filled_avg_price)
-                except Exception:
-                    pass
-            # Try to get exit price from most recent filled sell order for this ticker
-            try:
-                sell_orders = alpaca.get_orders(filter=GetOrdersRequest(
-                    status=QueryOrderStatus.CLOSED,
-                    symbols=[t],
-                    side=OrderSide.SELL,
-                ))
-                filled_sells = [o for o in sell_orders if o.status == OrderStatus.FILLED and o.filled_avg_price]
-                if filled_sells:
-                    exit_price = float(filled_sells[0].filled_avg_price)
-            except Exception:
-                pass
-            realized_pnl = None
-            if entry_price and exit_price and qty:
-                realized_pnl = (exit_price - entry_price) * qty
-            closed_trades.append({
-                "ticker":       t,
-                "entry":        entry_price,
-                "exit":         exit_price,
-                "qty":          qty,
-                "pnl":          realized_pnl,
-                "reasoning":    trade.get("reasoning", ""),
-                "timestamp":    ts,
+            exit_list = exits_by_ticker.get(ticker, [])
+            idx = cursor[ticker]
+            paired = None
+            for i in range(idx, len(exit_list)):
+                if exit_list[i].filled_at >= entry.filled_at:
+                    paired = exit_list[i]
+                    cursor[ticker] = i + 1
+                    break
+            entry_price  = float(entry.filled_avg_price)
+            exit_price   = float(paired.filled_avg_price) if paired else None
+            qty          = int(float(entry.filled_qty))
+            if direction == "LONG":
+                realized_pnl = (exit_price - entry_price) * qty if exit_price else None
+            else:
+                realized_pnl = (entry_price - exit_price) * qty if exit_price else None
+            ts = entry.filled_at.strftime("%Y-%m-%d %H:%M") if entry.filled_at else ""
+            result.append({
+                "ticker":    ticker,
+                "direction": direction,
+                "entry":     entry_price,
+                "exit":      exit_price,
+                "qty":       qty,
+                "pnl":       realized_pnl,
+                "reasoning": reasoning_map.get(ticker, ""),
+                "timestamp": ts,
             })
+        return result
+
+    closed_trades = (
+        _pair_trades(long_entries,  long_exits_by_ticker,  "LONG") +
+        _pair_trades(short_entries, short_exits_by_ticker, "SHORT")
+    )
+    closed_trades.sort(key=lambda x: x["timestamp"], reverse=True)
 
     won  = sum(1 for c in closed_trades if c["pnl"] is not None and c["pnl"] > 0)
     lost = sum(1 for c in closed_trades if c["pnl"] is not None and c["pnl"] <= 0)

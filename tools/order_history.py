@@ -1,6 +1,10 @@
 from __future__ import annotations
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import json
+import os
+
+from colorama import Fore
 
 
 # ── Corrélation ──────────────────────────────────────────────────────────────
@@ -120,4 +124,60 @@ def correlate_orders(orders: list[dict]) -> list[dict]:
             trades.append(_make_orphan(ticker, pending_entry))
 
     trades.sort(key=lambda t: t["entry_time"])
+    return trades
+
+
+def fetch_orders(api_key: str, api_secret: str, days: int) -> list[dict]:
+    from alpaca.trading.client import TradingClient
+    from alpaca.trading.requests import GetOrdersRequest
+    from alpaca.trading.enums import QueryOrderStatus
+
+    client = TradingClient(api_key, api_secret, paper=True)
+    after = datetime.now(timezone.utc) - timedelta(days=days)
+
+    req = GetOrdersRequest(
+        status=QueryOrderStatus.ALL,
+        after=after,
+        limit=500,
+    )
+    raw_orders = client.get_orders(req)
+
+    return [
+        {
+            "symbol":           o.symbol,
+            "side":             o.side.value,
+            "order_type":       o.type.value,
+            "filled_avg_price": str(o.filled_avg_price) if o.filled_avg_price else None,
+            "filled_at":        o.filled_at.isoformat() if o.filled_at else None,
+            "filled_qty":       str(o.filled_qty) if o.filled_qty else None,
+            "status":           o.status.value,
+            "id":               str(o.id),
+        }
+        for o in raw_orders
+        if o.status.value == "filled"
+        and o.filled_avg_price is not None
+        and o.filled_qty is not None
+        and o.filled_at is not None
+    ]
+
+
+def enrich_with_analyses(trades: list[dict], analyses_path: str) -> list[dict]:
+    if not os.path.exists(analyses_path):
+        print(f"{Fore.YELLOW}[warn] {analyses_path} introuvable, enrichissement ignoré.")
+        return trades
+
+    with open(analyses_path) as f:
+        analyses = json.load(f)
+
+    # Enrichissement par ticker (fallback sans buy_id dans les trades corrélés)
+    for trade in trades:
+        for run in analyses:
+            for at in run.get("trades", []):
+                if at.get("ticker") != trade["ticker"]:
+                    continue
+                reasoning = at.get("reasoning", "")
+                if reasoning:
+                    trade["reasoning"] = reasoning
+                    break
+
     return trades

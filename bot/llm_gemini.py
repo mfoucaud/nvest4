@@ -5,7 +5,7 @@ import time
 from google import genai
 from google.genai.errors import ClientError
 
-from bot.llm import PROMPT_TEMPLATE, LLMDecision, Action
+from bot.llm import PROMPT_TEMPLATE, LLMDecision, Action, compute_price_trend
 
 MODEL = "gemini-2.0-flash"
 
@@ -29,9 +29,7 @@ class GeminiProvider:
         trail_pct:      float = 5.0,
     ) -> LLMDecision:
         recent_prices = recent_prices or []
-        price_trend = 0.0
-        if len(recent_prices) >= 2 and recent_prices[0] != 0:
-            price_trend = (recent_prices[-1] - recent_prices[0]) / recent_prices[0] * 100
+        price_trend = compute_price_trend(recent_prices)
 
         prompt = PROMPT_TEMPLATE.format(
             ticker=ticker,

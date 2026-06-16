@@ -60,10 +60,7 @@ def run_cycle(watchlist: list[str], config: dict) -> RunSummary:
         headlines     = [n.headline for n in news_items if n.high_impact]
         trail_pct     = compute_trail_pct(signal.atr, signal.close)
 
-        # Intentional stub: scanner only exposes the latest close.
-        # The LLM prompt benefits from the market regime and ATR context
-        # already provided; multi-point price history is a future improvement.
-        recent_prices: list[float] = [signal.close]
+        recent_prices: list[float] = signal.recent_closes or [signal.close]
 
         decision = llm.get_decision(
             ticker=ticker,

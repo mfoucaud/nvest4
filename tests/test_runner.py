@@ -176,3 +176,23 @@ class TestRunCycle:
         call_kwargs = provider.get_decision.call_args[1]
         assert call_kwargs["headlines"] == ["NVDA acquisition"]
         assert "Noise headline" not in call_kwargs["headlines"]
+
+    def test_buy_allowed_in_neutral_with_high_confidence(self):
+        """BUY en régime NEUTRAL avec confidence >= 0.75 → trade exécuté."""
+        trade_mock = MagicMock(return_value=TradeResult("NVDA", True, "b1", "s1"))
+        provider = _mock_provider(action=Action.BUY, confidence=0.80)
+        p = self._patches(provider=provider, regime=_NEUTRAL)
+        with p["scan"], p["news"], p["llm"], p["risk"], \
+             patch("bot.runner.execute_order", trade_mock), p["account"], p["positions"], p["regime"]:
+            run_cycle(watchlist=["NVDA"], config=_CONFIG)
+        trade_mock.assert_called_once()
+
+    def test_buy_blocked_in_neutral_with_low_confidence(self):
+        """BUY en régime NEUTRAL avec confidence < 0.75 → trade bloqué."""
+        trade_mock = MagicMock()
+        provider = _mock_provider(action=Action.BUY, confidence=0.70)
+        p = self._patches(provider=provider, regime=_NEUTRAL)
+        with p["scan"], p["news"], p["llm"], p["risk"], \
+             patch("bot.runner.execute_order", trade_mock), p["account"], p["positions"], p["regime"]:
+            run_cycle(watchlist=["NVDA"], config=_CONFIG)
+        trade_mock.assert_not_called()

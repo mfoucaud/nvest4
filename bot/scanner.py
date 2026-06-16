@@ -19,7 +19,8 @@ class SignalResult:
     close:         float
     rsi:           float | None
     atr:           float
-    signals:       list[str] = field(default_factory=list)
+    recent_closes: list[float] = field(default_factory=list)
+    signals:       list[str]   = field(default_factory=list)
     passes_filter: bool = False
 
 
@@ -130,11 +131,15 @@ def compute_signals(df: pd.DataFrame, ticker: str,
     adx_ok = adx is not None and float(adx) >= ADX_MIN
     passes = len(signals) >= MIN_SIGNALS and adx_ok
 
+    recent_closes = df["Close"].iloc[-5:].tolist()
+    recent_closes = [float(c) for c in recent_closes]
+
     return SignalResult(
         ticker=ticker,
         close=close,
         rsi=float(rsi) if rsi is not None else None,
         atr=float(atr_val),
+        recent_closes=recent_closes,
         signals=signals,
         passes_filter=passes,
     )

@@ -4,6 +4,13 @@ from enum import Enum
 from typing import Protocol, runtime_checkable
 
 
+def compute_price_trend(recent_prices: list[float]) -> float:
+    """Compute % change from first to last price. Returns 0.0 if insufficient data."""
+    if len(recent_prices) >= 2 and recent_prices[0] != 0:
+        return (recent_prices[-1] - recent_prices[0]) / recent_prices[0] * 100
+    return 0.0
+
+
 PROMPT_TEMPLATE = """\
 Tu es un analyste financier spécialisé en trading directionnel. Analyse cet actif et retourne une décision JSON.
 

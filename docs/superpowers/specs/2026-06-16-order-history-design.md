@@ -44,24 +44,34 @@ Variables d'env requises : `ALPACA_KEY`, `ALPACA_SECRET` (ou `.env`)
 
 ---
 
-## Corrélation BUY → SELL
+## Corrélation entrée → sortie
 
+La direction du trade détermine quel ordre est l'entrée et lequel est la sortie :
+
+| Direction | Ordre d'entrée | Ordre de sortie |
+|-----------|---------------|-----------------|
+| LONG      | BUY (market)  | SELL (trailing stop ou manual) |
+| SHORT     | SELL (market) | BUY (trailing stop cover ou manual) |
+
+Algorithme :
 1. Filtrer les ordres `filled` uniquement
 2. Grouper par ticker
 3. Pour chaque ticker, trier par date
-4. Matcher chaque BUY avec le SELL `filled` suivant sur le même ticker
-5. Type de clôture détecté :
-   - `trailing_stop` si l'ordre SELL est de type `trailing_stop`
-   - `manual` si market/limit SELL
-   - `expired` si ordre expiré sans fill correspondant
-6. Si `analyses.json` fourni : enrichir avec `reasoning` LLM via `buy_id`
+4. Détecter la direction de chaque séquence : si le premier ordre non apparié est un BUY → LONG ; si c'est un SELL market → SHORT
+5. Matcher entrée → sortie dans l'ordre chronologique
+6. Type de clôture détecté :
+   - `trailing_stop` si l'ordre de sortie est de type `trailing_stop`
+   - `manual` si market/limit dans le sens inverse
+   - `orphan` si entrée sans sortie correspondante (position encore ouverte)
+7. Si `analyses.json` fourni : enrichir avec `reasoning` LLM via `buy_id` (= `stop_id` pour les shorts)
 
 ---
 
 ## Calculs par trade
 
-- `pnl` = `(exit_price - entry_price) × qty` (LONG) ou inverse (SHORT)
-- `duration` = `filled_at(SELL) - filled_at(BUY)` en minutes
+- `pnl` LONG  = `(exit_price - entry_price) × qty`
+- `pnl` SHORT = `(entry_price - exit_price) × qty`
+- `duration` = `filled_at(sortie) - filled_at(entrée)` en minutes
 - `win` = pnl > 0
 
 ---

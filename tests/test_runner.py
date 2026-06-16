@@ -99,14 +99,15 @@ class TestRunCycle:
         trade_mock.assert_not_called()
 
     def test_sell_blocked_in_bull_market(self):
-        """SELL en régime BULL → trade bloqué."""
+        """SELL en régime BULL → trade bloqué avec raison REGIME_CONFLICT."""
         short_mock = MagicMock()
         provider = _mock_provider(action=Action.SELL)
         p = self._patches(provider=provider, regime=_BULL)
         with p["scan"], p["news"], p["llm"], p["risk"], \
              patch("bot.runner.execute_short_order", short_mock), p["account"], p["positions"], p["regime"]:
-            run_cycle(watchlist=["NVDA"], config=_CONFIG)
+            summary = run_cycle(watchlist=["NVDA"], config=_CONFIG)
         short_mock.assert_not_called()
+        assert any("REGIME_CONFLICT" in s.get("reason", "") for s in summary.skipped)
 
     def test_low_confidence_decision_skipped(self):
         """Confidence < 0.65 → trade skippé."""
@@ -151,3 +152,27 @@ class TestRunCycle:
         with p["scan"], p["news"], p["llm"], p["risk"], p["trade"], p["account"], p["positions"], p["regime"]:
             summary = run_cycle(watchlist=["NVDA"], config=_CONFIG)
         assert "NVDA" in summary.analysed
+
+    def test_no_trade_when_no_signal(self):
+        """Scan returns no signals → no trade executed."""
+        trade_mock = MagicMock()
+        p = self._patches()
+        with patch("bot.runner.scan_watchlist", return_value=[]), \
+             p["news"], p["llm"], p["risk"], \
+             patch("bot.runner.execute_order", trade_mock), p["account"], p["positions"], p["regime"]:
+            run_cycle(watchlist=["NVDA"], config=_CONFIG)
+        trade_mock.assert_not_called()
+
+    def test_only_high_impact_headlines_sent_to_llm(self):
+        """Only high-impact news headlines are passed to LLM."""
+        provider = _mock_provider()
+        low  = NewsItem(headline="Noise headline", score=1, high_impact=False)
+        high = NewsItem(headline="NVDA acquisition", score=8, high_impact=True)
+        p = self._patches(provider=provider)
+        with p["scan"], \
+             patch("bot.runner.classify_news", return_value=[low, high]), \
+             p["llm"], p["risk"], p["trade"], p["account"], p["positions"], p["regime"]:
+            run_cycle(watchlist=["NVDA"], config=_CONFIG)
+        call_kwargs = provider.get_decision.call_args[1]
+        assert call_kwargs["headlines"] == ["NVDA acquisition"]
+        assert "Noise headline" not in call_kwargs["headlines"]

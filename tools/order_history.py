@@ -1,10 +1,13 @@
 from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+import argparse
+import csv
 import json
 import os
 
-from colorama import Fore
+from colorama import Fore, Style
+from tabulate import tabulate
 
 
 # ── Corrélation ──────────────────────────────────────────────────────────────
@@ -185,3 +188,130 @@ def enrich_with_analyses(trades: list[dict], analyses_path: str) -> list[dict]:
                 break
 
     return trades
+
+
+def _fmt_pnl(pnl) -> str:
+    if pnl is None:
+        return "—"
+    sign = "+" if pnl >= 0 else ""
+    color = Fore.GREEN if pnl >= 0 else Fore.RED
+    return f"{color}{sign}${pnl:.2f}{Style.RESET_ALL}"
+
+
+def _fmt_duration(minutes) -> str:
+    if minutes is None:
+        return "—"
+    if minutes < 60:
+        return f"{int(minutes)}m"
+    h = int(minutes // 60)
+    m = int(minutes % 60)
+    return f"{h}h{m:02d}m"
+
+
+def print_report(trades: list[dict]) -> None:
+    completed = [t for t in trades if t["close_type"] != "orphan"]
+    orphans   = [t for t in trades if t["close_type"] == "orphan"]
+
+    # ── KPIs globaux ──
+    total = len(completed)
+    wins  = sum(1 for t in completed if t.get("win"))
+    pnl_total = sum(t["pnl"] for t in completed if t["pnl"] is not None)
+    win_rate = (wins / total * 100) if total else 0
+
+    pnl_color = Fore.GREEN if pnl_total >= 0 else Fore.RED
+    print()
+    print("═" * 60)
+    print(f"  {Style.BRIGHT}KPIs GLOBAUX{Style.RESET_ALL}")
+    print(f"  Trades : {total}  |  Win Rate : {Fore.YELLOW}{win_rate:.0f}%{Style.RESET_ALL}  |  PnL Total : {pnl_color}{'+'if pnl_total>=0 else ''}${pnl_total:.2f}{Style.RESET_ALL}")
+    print("═" * 60)
+    print()
+
+    # ── Tableau trades ──
+    rows = []
+    for t in completed:
+        dir_color = Fore.CYAN if t["direction"] == "LONG" else Fore.MAGENTA
+        rows.append([
+            t["ticker"],
+            f"{dir_color}{t['direction']}{Style.RESET_ALL}",
+            f"${t['entry_price']:.2f}",
+            f"${t['exit_price']:.2f}" if t["exit_price"] else "—",
+            int(t["qty"]),
+            _fmt_pnl(t["pnl"]),
+            _fmt_duration(t["duration_min"]),
+            f"{'WIN' if t['win'] else 'LOSS'}",
+            t["close_type"],
+        ])
+    headers = ["Ticker", "Dir", "Entrée", "Sortie", "Qté", "PnL", "Durée", "Résultat", "Clôture"]
+    print(f"{Style.BRIGHT}TRADES ({len(completed)}){Style.RESET_ALL}")
+    print(tabulate(rows, headers=headers, tablefmt="simple"))
+    print()
+
+    # ── Stats par ticker ──
+    by_ticker: dict[str, list] = defaultdict(list)
+    for t in completed:
+        by_ticker[t["ticker"]].append(t)
+
+    stat_rows = []
+    for ticker, ticker_trades in sorted(by_ticker.items()):
+        tw = [t for t in ticker_trades if t.get("win")]
+        pnls = [t["pnl"] for t in ticker_trades if t["pnl"] is not None]
+        durs = [t["duration_min"] for t in ticker_trades if t["duration_min"] is not None]
+        stat_rows.append([
+            ticker,
+            len(ticker_trades),
+            f"{Fore.YELLOW}{len(tw)/len(ticker_trades)*100:.0f}%{Style.RESET_ALL}",
+            _fmt_pnl(sum(pnls)/len(pnls) if pnls else None),
+            _fmt_duration(sum(durs)/len(durs) if durs else None),
+        ])
+    print(f"{Style.BRIGHT}STATS PAR TICKER{Style.RESET_ALL}")
+    print(tabulate(stat_rows, headers=["Ticker", "Trades", "Win Rate", "PnL Moyen", "Durée Moy"], tablefmt="simple"))
+
+    if orphans:
+        print()
+        print(f"{Fore.YELLOW}Positions orphelines (entrée sans sortie) : {', '.join(t['ticker'] for t in orphans)}{Style.RESET_ALL}")
+    print()
+
+
+def export_csv(trades: list[dict], path: str) -> None:
+    fields = [
+        "ticker", "direction", "entry_price", "exit_price", "qty",
+        "pnl", "duration_min", "win", "close_type",
+        "entry_time", "exit_time", "reasoning",
+    ]
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(trades)
+    print(f"{Fore.GREEN}Export CSV : {path}{Style.RESET_ALL}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Historique des ordres Alpaca avec corrélation PnL")
+    parser.add_argument("--days",     type=int,  default=30,  help="Nombre de jours d'historique (défaut: 30)")
+    parser.add_argument("--output",   type=str,  default=None, help="Chemin export CSV optionnel")
+    parser.add_argument("--analyses", type=str,  default=None, help="Chemin vers analyses.json pour enrichissement")
+    args = parser.parse_args()
+
+    api_key    = os.getenv("ALPACA_KEY")
+    api_secret = os.getenv("ALPACA_SECRET")
+    if not api_key or not api_secret:
+        print(f"{Fore.RED}[erreur] Variables ALPACA_KEY et ALPACA_SECRET requises.{Style.RESET_ALL}")
+        raise SystemExit(1)
+
+    print(f"Récupération des ordres des {args.days} derniers jours...")
+    orders = fetch_orders(api_key, api_secret, args.days)
+    print(f"{len(orders)} ordres filled récupérés.")
+
+    trades = correlate_orders(orders)
+
+    if args.analyses:
+        trades = enrich_with_analyses(trades, args.analyses)
+
+    print_report(trades)
+
+    if args.output:
+        export_csv(trades, args.output)
+
+
+if __name__ == "__main__":
+    main()

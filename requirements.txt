@@ -5,4 +5,5 @@ google-genai
 groq
 requests
 python-dotenv
+tabulate
 pytest

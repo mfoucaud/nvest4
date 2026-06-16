@@ -1,5 +1,6 @@
 # bot/scanner.py
 from dataclasses import dataclass, field
+import math
 import pandas as pd
 import pandas_ta as ta
 import yfinance as yf
@@ -32,12 +33,16 @@ def fetch_ohlcv(ticker: str) -> pd.DataFrame | None:
 
 
 def fetch_ohlcv_1h(ticker: str) -> pd.DataFrame | None:
-    df = yf.download(ticker, period="30d", interval="1h", progress=False, auto_adjust=True)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    if df.empty or len(df) < 21:
+    try:
+        df = yf.download(ticker, period="30d", interval="1h", progress=False, auto_adjust=True)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        if df.empty or len(df) < 22:
+            return None
+        return df
+    except Exception as e:
+        print(f"[scanner] fetch_ohlcv_1h {ticker} failed: {e}")
         return None
-    return df
 
 
 def _trend_1h(df_1h: pd.DataFrame | None) -> str:
@@ -50,7 +55,7 @@ def _trend_1h(df_1h: pd.DataFrame | None) -> str:
     latest = df.iloc[-1]
     ema9  = latest.get("EMA_9")
     ema21 = latest.get("EMA_21")
-    if ema9 is None or ema21 is None:
+    if ema9 is None or ema21 is None or math.isnan(float(ema9)) or math.isnan(float(ema21)):
         return "NEUTRAL"
     if ema9 > ema21:
         return "UP"
@@ -82,7 +87,8 @@ def compute_signals(df: pd.DataFrame, ticker: str,
     p_macd = prev.get("MACD_12_26_9")
     p_macd_s = prev.get("MACDs_12_26_9")
     adx    = latest.get("ADX_14")
-    atr_val= latest.get("ATRr_14") or latest.get("ATR_14") or 0.0
+    _raw = latest.get("ATRr_14") or latest.get("ATR_14")
+    atr_val = 0.0 if (_raw is None or (isinstance(_raw, float) and math.isnan(float(_raw)))) else float(_raw)
 
     volume  = float(latest["Volume"])
     avg_vol = float(df["Volume"].iloc[-LOOKBACK_DAYS - 1:-1].mean())

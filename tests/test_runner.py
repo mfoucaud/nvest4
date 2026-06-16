@@ -9,7 +9,7 @@ from bot.trader import TradeResult
 
 
 def _signal(ticker="AAPL"):
-    return SignalResult(ticker=ticker, close=150.0, rsi=30.0,
+    return SignalResult(ticker=ticker, close=150.0, rsi=30.0, atr=1.5,
                         signals=["RSI_OVERSOLD(30.0)"], passes_filter=True)
 
 

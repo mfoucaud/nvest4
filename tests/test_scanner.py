@@ -90,8 +90,7 @@ class TestComputeSignals:
         vols[-1] = 7_000_000
         df = _prices([100.0] * n, vols)
         result = compute_signals(df, "XOM", _1h_df("UP"))
-        # RSI sera ~50 (flat), pas d'EMA cross, pas de MACD signal → 1 seul signal
-        # Confluence exige ≥2 → False
+        # Flat data → ADX near 0/NaN → adx_ok=False → passes_filter=False regardless of signal count
         assert not result.passes_filter
 
 

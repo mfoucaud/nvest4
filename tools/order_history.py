@@ -135,7 +135,10 @@ def fetch_orders(api_key: str, api_secret: str, days: int) -> list[dict]:
     from alpaca.trading.requests import GetOrdersRequest
     from alpaca.trading.enums import QueryOrderStatus
 
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     client = TradingClient(api_key, api_secret, paper=True)
+    client._session.verify = False  # Windows SSL workaround
     after = datetime.now(timezone.utc) - timedelta(days=days)
 
     req = GetOrdersRequest(
@@ -220,10 +223,10 @@ def print_report(trades: list[dict]) -> None:
 
     pnl_color = Fore.GREEN if pnl_total >= 0 else Fore.RED
     print()
-    print("═" * 60)
+    print("=" * 60)
     print(f"  {Style.BRIGHT}KPIs GLOBAUX{Style.RESET_ALL}")
     print(f"  Trades : {total}  |  Win Rate : {Fore.YELLOW}{win_rate:.0f}%{Style.RESET_ALL}  |  PnL Total : {pnl_color}{'+'if pnl_total>=0 else ''}${pnl_total:.2f}{Style.RESET_ALL}")
-    print("═" * 60)
+    print("=" * 60)
     print()
 
     # ── Tableau trades ──

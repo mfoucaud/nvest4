@@ -235,10 +235,10 @@ def print_report(trades: list[dict]) -> None:
             f"{dir_color}{t['direction']}{Style.RESET_ALL}",
             f"${t['entry_price']:.2f}",
             f"${t['exit_price']:.2f}" if t["exit_price"] else "—",
-            int(t["qty"]),
+            int(t["qty"]) if t.get("qty") is not None else "—",
             _fmt_pnl(t["pnl"]),
             _fmt_duration(t["duration_min"]),
-            f"{'WIN' if t['win'] else 'LOSS'}",
+            f"{Fore.GREEN}WIN{Style.RESET_ALL}" if t.get("win") else f"{Fore.RED}LOSS{Style.RESET_ALL}",
             t["close_type"],
         ])
     headers = ["Ticker", "Dir", "Entrée", "Sortie", "Qté", "PnL", "Durée", "Résultat", "Clôture"]
@@ -298,14 +298,21 @@ def main() -> None:
         print(f"{Fore.RED}[erreur] Variables ALPACA_KEY et ALPACA_SECRET requises.{Style.RESET_ALL}")
         raise SystemExit(1)
 
-    print(f"Récupération des ordres des {args.days} derniers jours...")
-    orders = fetch_orders(api_key, api_secret, args.days)
-    print(f"{len(orders)} ordres filled récupérés.")
+    try:
+        print(f"Récupération des ordres des {args.days} derniers jours...")
+        orders = fetch_orders(api_key, api_secret, args.days)
+        print(f"{len(orders)} ordres filled récupérés.")
+    except Exception as e:
+        print(f"{Fore.RED}[erreur] Impossible de récupérer les ordres Alpaca : {e}{Style.RESET_ALL}")
+        raise SystemExit(1)
 
     trades = correlate_orders(orders)
 
     if args.analyses:
-        trades = enrich_with_analyses(trades, args.analyses)
+        try:
+            trades = enrich_with_analyses(trades, args.analyses)
+        except Exception as e:
+            print(f"{Fore.YELLOW}[warn] Enrichissement échoué : {e}{Style.RESET_ALL}")
 
     print_report(trades)
 

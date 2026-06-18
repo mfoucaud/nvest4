@@ -75,6 +75,30 @@ def render_dashboard(
     if not open_rows:
         open_rows = '<tr><td colspan="6" style="text-align:center;color:#8b949e;padding:20px">Aucune position ouverte</td></tr>'
 
+    # ── Analyses log ────────────────────────────────────────────────────────
+    analyses_rows = ""
+    for a in analyses:
+        action = a.get("action", "")
+        traded = a.get("traded", False)
+        if traded:
+            action_html = f'<span class="badge win">{action}</span>'
+        elif action in ("BUY", "SELL", "SHORT"):
+            action_html = f'<span class="badge exp">{action}</span>'
+        else:
+            action_html = f'<span style="color:#8b949e">{action}</span>'
+        reasoning = a.get("reasoning", "")
+        short_r = (reasoning[:150] + "…") if len(reasoning) > 150 else reasoning
+        analyses_rows += f"""
+<tr>
+  <td style="color:#8b949e;white-space:nowrap">{a.get("timestamp", "")}</td>
+  <td><strong>{a.get("ticker", "")}</strong></td>
+  <td>{action_html}</td>
+  <td style="color:#8b949e;font-size:.82em">{short_r}</td>
+</tr>"""
+
+    if not analyses_rows:
+        analyses_rows = '<tr><td colspan="4" style="text-align:center;color:#8b949e;padding:20px">Aucune analyse disponible</td></tr>'
+
     # ── Closed trades ───────────────────────────────────────────────────────
     closed_rows = ""
     for c in closed_trades:
@@ -204,6 +228,18 @@ def render_dashboard(
     </tr>
   </thead>
   <tbody>{closed_rows}</tbody>
+</table>
+</div>
+
+<div class="section-title">Journal des Analyses ({len(analyses)})</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Date</th><th>Actif</th><th>Décision</th><th>Raisonnement</th>
+    </tr>
+  </thead>
+  <tbody>{analyses_rows}</tbody>
 </table>
 </div>
 

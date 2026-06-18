@@ -57,12 +57,14 @@ def render_dashboard(
         stop_str  = f"${stop:.2f}" if stop else "—"
         stop_color = "#d29922" if stop else "#8b949e"
         ticker    = p["ticker"]
+        direction = p.get("direction", "LONG")
+        dir_badge = '<span class="badge short-badge">SHORT</span>' if direction == "SHORT" else '<span class="badge long-badge">LONG</span>'
         entry     = p.get("entry", 0)
         current   = p.get("current", 0)
         qty       = p.get("qty", 0)
         open_rows += f"""
 <tr>
-  <td><strong>{ticker}</strong></td>
+  <td><strong>{ticker}</strong> {dir_badge}</td>
   <td>${entry:.2f}</td>
   <td>${current:.2f}</td>
   <td>{qty}</td>
@@ -92,11 +94,13 @@ def render_dashboard(
         entry_str = f"${entry:.2f}" if entry else "—"
         exit_str  = f"${exit_:.2f}" if exit_ else "—"
         expl  = _perf_explanation(c)
+        direction = c.get("direction", "LONG")
+        dir_badge = '<span class="badge short-badge">SHORT</span>' if direction == "SHORT" else '<span class="badge long-badge">LONG</span>'
 
         closed_rows += f"""
 <tr>
   <td>{c.get("timestamp", "")}</td>
-  <td><strong>{c["ticker"]}</strong></td>
+  <td><strong>{c["ticker"]}</strong> {dir_badge}</td>
   <td>{entry_str}</td>
   <td>{exit_str}</td>
   <td>{c.get("qty", "—")}</td>
@@ -133,9 +137,11 @@ def render_dashboard(
   tr:last-child td {{ border-bottom: none; }}
   tr:hover td {{ background: #1c2128; }}
   .badge {{ display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .75em; font-weight: 700; letter-spacing: .3px; }}
-  .badge.win  {{ background: #1a3a1a; color: #3fb950; }}
-  .badge.loss {{ background: #3a1a1a; color: #f85149; }}
-  .badge.exp  {{ background: #2a2a1a; color: #d29922; }}
+  .badge.win        {{ background: #1a3a1a; color: #3fb950; }}
+  .badge.loss       {{ background: #3a1a1a; color: #f85149; }}
+  .badge.exp        {{ background: #2a2a1a; color: #d29922; }}
+  .badge.long-badge {{ background: #1a2a3a; color: #58a6ff; }}
+  .badge.short-badge{{ background: #2a1a3a; color: #bc8cff; }}
   .footer {{ text-align: center; padding: 24px; color: #8b949e; font-size: .78em; }}
 </style>
 </head>

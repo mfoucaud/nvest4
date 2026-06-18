@@ -17,6 +17,8 @@ WATCHLIST = [
     "NVDA", "AMD", "SMCI", "PLTR", "COIN", "MSTR", "RDDT", "CRWD", "ANET", "UBER",
     # Mega-caps momentum (conservés)
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NFLX", "ADBE",
+    # Energie (geopolitique Iran/pétrole)
+    "XOM", "CVX", "OXY", "SCO", "DRIP",
 ]
 
 CONFIG = {

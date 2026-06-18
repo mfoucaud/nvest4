@@ -30,7 +30,7 @@ class TestPositionSizing:
 
 class TestMaxPositions:
     def test_rejected_when_max_positions_reached(self):
-        open_pos = [f"TICK{i}" for i in range(10)]  # MAX_POSITIONS = 10
+        open_pos = [f"TICK{i}" for i in range(25)]  # MAX_POSITIONS = 25
         order = validate_order(
             ticker="NVDA", price=100.0,
             capital=50_000.0, open_positions=open_pos

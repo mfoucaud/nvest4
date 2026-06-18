@@ -19,6 +19,7 @@ class SignalResult:
     close:         float
     rsi:           float | None
     atr:           float
+    sma20:         float = 0.0
     recent_closes: list[float] = field(default_factory=list)
     signals:       list[str]   = field(default_factory=list)
     passes_filter: bool = False
@@ -71,6 +72,7 @@ def compute_signals(df: pd.DataFrame, ticker: str,
     df.ta.rsi(length=14, append=True)
     df.ta.ema(length=9,  append=True)
     df.ta.ema(length=21, append=True)
+    df.ta.sma(length=20, append=True)
     df.ta.macd(fast=12, slow=26, signal=9, append=True)
     df.ta.adx(length=14, append=True)
     df.ta.atr(length=14, append=True)
@@ -134,11 +136,15 @@ def compute_signals(df: pd.DataFrame, ticker: str,
     recent_closes = df["Close"].iloc[-5:].tolist()
     recent_closes = [float(c) for c in recent_closes]
 
+    _sma20_raw = latest.get("SMA_20")
+    sma20 = 0.0 if (_sma20_raw is None or (isinstance(_sma20_raw, float) and math.isnan(float(_sma20_raw)))) else float(_sma20_raw)
+
     return SignalResult(
         ticker=ticker,
         close=close,
         rsi=float(rsi) if rsi is not None else None,
         atr=float(atr_val),
+        sma20=sma20,
         recent_closes=recent_closes,
         signals=signals,
         passes_filter=passes,

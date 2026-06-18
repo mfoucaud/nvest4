@@ -15,11 +15,11 @@ CONFIDENCE_MIN_NEUTRAL = 0.75
 
 
 def compute_trail_pct(atr: float, close: float) -> float:
-    """Trailing stop adaptatif : 2×ATR/prix, borné entre 3% et 10%."""
+    """Trailing stop adaptatif : 2×ATR/prix, borné entre 5% et 12%."""
     if close <= 0 or atr <= 0:
         return 5.0
     pct = round(2 * atr / close * 100, 1)
-    return max(3.0, min(10.0, pct))
+    return max(5.0, min(12.0, pct))
 
 
 def get_account(client):
@@ -89,6 +89,17 @@ def run_cycle(watchlist: list[str], config: dict) -> RunSummary:
                 "reasoning": decision.reasoning,
             })
             continue
+
+        # Filtre SMA20 : n'entrer qu'en tendance
+        if signal.sma20 > 0:
+            if decision.action == Action.BUY and signal.close < signal.sma20:
+                summary.skipped.append({"ticker": ticker, "reason": "BELOW_SMA20",
+                                         "reasoning": f"close {signal.close:.2f} < SMA20 {signal.sma20:.2f}"})
+                continue
+            if decision.action == Action.SELL and signal.close > signal.sma20:
+                summary.skipped.append({"ticker": ticker, "reason": "ABOVE_SMA20",
+                                         "reasoning": f"close {signal.close:.2f} > SMA20 {signal.sma20:.2f}"})
+                continue
 
         # Blocage des décisions contradictoires avec le régime
         if regime.regime == "BULL" and decision.action == Action.SELL:

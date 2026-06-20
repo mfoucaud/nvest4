@@ -8,7 +8,8 @@ from alpaca.trading.enums import QueryOrderStatus, OrderSide, OrderStatus
 
 from bot.runner import run_cycle
 from bot.dashboard import render_dashboard
-from bot.persistence import append_run, load_from_gist, push_to_gist
+from bot.persistence import append_run, load_from_gist, push_to_gist, load_reviews_from_gist
+from tools.trade_reviewer import review_pending_trades
 
 load_dotenv()
 
@@ -42,6 +43,7 @@ def main():
     token   = os.environ.get("GITHUB_TOKEN")
 
     prior_analyses = load_from_gist(gist_id, token) if (gist_id and token) else None
+    existing_reviews = load_reviews_from_gist(gist_id, token) if (gist_id and token) else []
 
     run_dict = {
         "analysed": summary.analysed,
@@ -189,6 +191,14 @@ def main():
     )
     closed_trades.sort(key=lambda x: x["timestamp"], reverse=True)
 
+    new_reviews = review_pending_trades(
+        closed_trades=closed_trades,
+        existing_reviews=existing_reviews,
+        config=CONFIG,
+        max_per_run=5,
+    )
+    all_reviews = existing_reviews + [r.to_dict() for r in new_reviews]
+
     won  = sum(1 for c in closed_trades if c["pnl"] is not None and c["pnl"] > 0)
     lost = sum(1 for c in closed_trades if c["pnl"] is not None and c["pnl"] <= 0)
     total_closed = len([c for c in closed_trades if c["pnl"] is not None])
@@ -207,10 +217,11 @@ def main():
         closed_trades=closed_trades,
         analyses=analyses_flat[-50:],
         portfolio=portfolio,
+        reviews=all_reviews[-30:],
     )
 
     if gist_id and token:
-        push_to_gist(html, analyses, gist_id, token)
+        push_to_gist(html, analyses, gist_id, token, reviews=all_reviews)
         print("Dashboard pushed to Gist.")
     else:
         with open("dashboard.html", "w") as f:

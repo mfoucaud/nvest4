@@ -39,12 +39,36 @@ def append_run(summary_dict: dict, analyses: list[dict] | None = None,
     return analyses
 
 
-def push_to_gist(html: str, analyses: list[dict], gist_id: str, github_token: str) -> None:
+def push_to_gist(
+    html: str,
+    analyses: list[dict],
+    gist_id: str,
+    github_token: str,
+    reviews: list[dict] | None = None,
+) -> None:
+    files: dict = {
+        "dashboard.html": {"content": html},
+        "analyses.json":  {"content": json.dumps(analyses, indent=2)},
+    }
+    if reviews is not None:
+        files["reviews.json"] = {"content": json.dumps(reviews, indent=2)}
+
     requests.patch(
         f"https://api.github.com/gists/{gist_id}",
         headers={"Authorization": f"token {github_token}"},
-        json={"files": {
-            "dashboard.html":  {"content": html},
-            "analyses.json":   {"content": json.dumps(analyses, indent=2)},
-        }},
+        json={"files": files},
     ).raise_for_status()
+
+
+def load_reviews_from_gist(gist_id: str, github_token: str) -> list[dict]:
+    resp = requests.get(
+        f"https://api.github.com/gists/{gist_id}",
+        headers={"Authorization": f"token {github_token}"},
+    )
+    if not resp.ok:
+        return []
+    files = resp.json().get("files", {})
+    if "reviews.json" not in files:
+        return []
+    raw = files["reviews.json"].get("content", "[]")
+    return json.loads(raw)

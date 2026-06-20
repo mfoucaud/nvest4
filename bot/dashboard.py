@@ -65,11 +65,10 @@ def _render_reviews_section(reviews: list[dict]) -> str:
   <div class="kpi"><div class="label">Note globale</div><div class="value" style="font-size:1.2em;color:#d29922">{avg_overall:.1f}/10</div></div>
 </div>"""
 
-    lessons = [r["lesson"] for r in recent[:10] if r.get("lesson")]
     lessons_html = "".join(
         f'<li style="padding:6px 0;border-bottom:1px solid #21262d;color:#e6edf3">'
         f'<span style="color:#8b949e;font-size:.8em">{r.get("entry_ts","")[:10]} {r.get("ticker","")}</span> — {r["lesson"]}</li>'
-        for r, l in zip(recent[:10], lessons)
+        for r in recent[:10] if r.get("lesson")
     )
     lessons_block = f"""
 <div style="background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px 20px;margin-bottom:20px">

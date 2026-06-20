@@ -71,4 +71,7 @@ def load_reviews_from_gist(gist_id: str, github_token: str) -> list[dict]:
     if "reviews.json" not in files:
         return []
     raw = files["reviews.json"].get("content", "[]")
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return []

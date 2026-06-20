@@ -221,7 +221,7 @@ def main():
     )
 
     if gist_id and token:
-        push_to_gist(html, analyses, gist_id, token, reviews=all_reviews)
+        push_to_gist(html, analyses, gist_id, token, reviews=all_reviews[-200:])
         print("Dashboard pushed to Gist.")
     else:
         with open("dashboard.html", "w") as f:

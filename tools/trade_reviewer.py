@@ -143,6 +143,13 @@ def _fetch_enriched(trade: dict) -> dict:
     }
 
 
+def _safe_score(value, default: int = 0) -> int:
+    try:
+        return max(0, min(10, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 def _call_llm(trade: dict, enriched: dict, client: Groq) -> TradeReview | None:
     """Appelle Groq pour analyser un trade. Retourne None en cas d'échec."""
     pnl = trade.get("pnl")
@@ -189,10 +196,10 @@ def _call_llm(trade: dict, enriched: dict, client: Groq) -> TradeReview | None:
                 pnl=pnl,
                 entry_ts=trade.get("timestamp", ""),
                 exit_ts=trade.get("exit_ts", ""),
-                signal_score=int(data["signal_score"]),
-                timing_score=int(data["timing_score"]),
-                sizing_score=int(data["sizing_score"]),
-                overall=int(data["overall"]),
+                signal_score=_safe_score(data.get("signal_score")),
+                timing_score=_safe_score(data.get("timing_score")),
+                sizing_score=_safe_score(data.get("sizing_score")),
+                overall=_safe_score(data.get("overall")),
                 verdict=data["verdict"],
                 lesson=data["lesson"],
             )

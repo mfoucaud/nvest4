@@ -196,3 +196,18 @@ class TestRunCycle:
              patch("bot.runner.execute_order", trade_mock), p["account"], p["positions"], p["regime"]:
             run_cycle(watchlist=["NVDA"], config=_CONFIG)
         trade_mock.assert_not_called()
+
+    def test_trade_dict_contains_decision_context(self):
+        """Trade dict persiste les données qui ont motivé la décision."""
+        p = self._patches(regime=_BULL)
+        with p["scan"], p["news"], p["llm"], p["risk"], p["trade"], p["account"], p["positions"], p["regime"]:
+            summary = run_cycle(watchlist=["NVDA"], config=_CONFIG)
+        assert len(summary.trades) == 1
+        trade = summary.trades[0]
+        assert "recent_prices" in trade
+        assert "signals" in trade
+        assert "atr" in trade
+        assert "trail_pct" in trade
+        assert "market_regime" in trade
+        assert "spy_perf_5d" in trade
+        assert "headlines" in trade

@@ -136,12 +136,19 @@ def run_cycle(watchlist: list[str], config: dict) -> RunSummary:
             continue
 
         summary.trades.append({
-            "ticker":    ticker,
-            "qty":       order.qty,
-            "direction": direction,
-            "buy_id":    result.buy_id,
-            "stop_id":   result.stop_id,
-            "reasoning": decision.reasoning,
+            "ticker":        ticker,
+            "qty":           order.qty,
+            "direction":     direction,
+            "buy_id":        result.buy_id,
+            "stop_id":       result.stop_id,
+            "reasoning":     decision.reasoning,
+            "recent_prices": recent_prices,
+            "signals":       signal.signals,
+            "atr":           signal.atr,
+            "trail_pct":     trail_pct,
+            "market_regime": regime.regime,
+            "spy_perf_5d":   regime.spy_perf_5d,
+            "headlines":     headlines,
         })
         open_tickers.append(ticker)
 

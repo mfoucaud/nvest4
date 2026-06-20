@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+import pandas as pd
 import yfinance as yf
 from groq import Groq
 
@@ -83,7 +84,11 @@ class TradeReview:
 
 
 def _fetch_enriched(trade: dict) -> dict:
-    """Fetche OHLCV intraday, news et contexte SPY pour un trade."""
+    """Fetche les données enrichies pour un trade.
+
+    Priorité aux données stockées au moment de la décision (runner).
+    Fallback vers yfinance pour les trades antérieurs.
+    """
     ticker   = trade["ticker"]
     entry_ts = trade.get("timestamp", "")
 
@@ -92,48 +97,62 @@ def _fetch_enriched(trade: dict) -> dict:
     except (ValueError, TypeError):
         entry_dt = datetime.now(timezone.utc)
 
-    start = (entry_dt - timedelta(days=1)).strftime("%Y-%m-%d")
-    end   = (entry_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+    # ── Prix intraday ────────────────────────────────────────────────────────
+    stored_prices = trade.get("recent_prices")
+    if stored_prices:
+        lines = [f"  close={p:.2f}" for p in stored_prices]
+        intraday_prices = "Prix journaliers au moment de la décision :\n" + "\n".join(lines)
+    else:
+        intraday_prices = "indisponible"
+        try:
+            start = (entry_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+            end   = (entry_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+            df = yf.download(ticker, start=start, end=end, interval="1h",
+                             progress=False, auto_adjust=True)
+            if not df.empty:
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                rows = df[["Open", "High", "Low", "Close"]].tail(12).round(2)
+                lines = [f"  {idx.strftime('%m-%d %H:%M')} O={r['Open']} H={r['High']} L={r['Low']} C={r['Close']}"
+                         for idx, r in rows.iterrows()]
+                intraday_prices = "\n".join(lines)
+        except Exception:
+            pass
 
-    # Prix intraday ticker
-    intraday_prices = "indisponible"
-    try:
-        df = yf.download(ticker, start=start, end=end, interval="1h",
-                         progress=False, auto_adjust=True)
-        if not df.empty:
-            if hasattr(df.columns, "get_level_values"):
-                df.columns = df.columns.get_level_values(0)
-            rows = df[["Open", "High", "Low", "Close"]].tail(12).round(2)
-            lines = [f"  {idx.strftime('%m-%d %H:%M')} O={r['Open']} H={r['High']} L={r['Low']} C={r['Close']}"
-                     for idx, r in rows.iterrows()]
-            intraday_prices = "\n".join(lines)
-    except Exception:
-        pass
+    # ── SPY context ──────────────────────────────────────────────────────────
+    stored_regime   = trade.get("market_regime")
+    stored_spy_perf = trade.get("spy_perf_5d")
+    if stored_regime is not None and stored_spy_perf is not None:
+        spy_perf_5d = float(stored_spy_perf)
+        spy_entry   = 0.0
+    else:
+        spy_perf_5d = 0.0
+        spy_entry   = 0.0
+        try:
+            spy_start = (entry_dt - timedelta(days=8)).strftime("%Y-%m-%d")
+            spy_end   = (entry_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+            spy_df = yf.download("SPY", start=spy_start, end=spy_end, interval="1d",
+                                  progress=False, auto_adjust=True)
+            if not spy_df.empty:
+                if isinstance(spy_df.columns, pd.MultiIndex):
+                    spy_df.columns = spy_df.columns.get_level_values(0)
+                close = spy_df["Close"]
+                spy_entry   = float(close.iloc[-1])
+                spy_perf_5d = float((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6] * 100) if len(close) >= 6 else 0.0
+        except Exception:
+            pass
 
-    # SPY context
-    spy_perf_5d = 0.0
-    spy_entry   = 0.0
-    try:
-        spy_start = (entry_dt - timedelta(days=8)).strftime("%Y-%m-%d")
-        spy_end   = (entry_dt + timedelta(days=2)).strftime("%Y-%m-%d")
-        spy_df = yf.download("SPY", start=spy_start, end=spy_end, interval="1d",
-                              progress=False, auto_adjust=True)
-        if not spy_df.empty:
-            if hasattr(spy_df.columns, "get_level_values"):
-                spy_df.columns = spy_df.columns.get_level_values(0)
-            close = spy_df["Close"]
-            spy_entry   = float(close.iloc[-1])  # last close in window around entry date
-            spy_perf_5d = float((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6] * 100) if len(close) >= 6 else 0.0
-    except Exception:
-        pass
-
-    # News
-    headlines = []
-    try:
-        news_items = classify_news(ticker)
-        headlines  = [n.headline for n in news_items if n.high_impact][:5]
-    except Exception:
-        pass
+    # ── News / headlines ─────────────────────────────────────────────────────
+    stored_headlines = trade.get("headlines")
+    if stored_headlines is not None:
+        headlines = stored_headlines[:5]
+    else:
+        headlines = []
+        try:
+            news_items = classify_news(ticker)
+            headlines  = [n.headline for n in news_items if n.high_impact][:5]
+        except Exception:
+            pass
 
     return {
         "intraday_prices": intraday_prices,

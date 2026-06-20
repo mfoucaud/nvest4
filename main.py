@@ -66,11 +66,20 @@ def main():
     account  = alpaca.get_account()
     positions = alpaca.get_all_positions()
 
-    # Reasoning map from analyses (best-effort enrichment)
-    reasoning_map: dict[str, str] = {}
+    # Context map — best-effort enrichment par ticker (dernière occurrence)
+    context_map: dict[str, dict] = {}
     for run in analyses:
         for trade in run.get("trades", []):
-            reasoning_map[trade["ticker"]] = trade.get("reasoning", "")
+            context_map[trade["ticker"]] = {
+                "reasoning":     trade.get("reasoning", ""),
+                "signals":       trade.get("signals", []),
+                "atr":           trade.get("atr", 0.0),
+                "trail_pct":     trade.get("trail_pct", 0.0),
+                "market_regime": trade.get("market_regime", ""),
+                "spy_perf_5d":   trade.get("spy_perf_5d", 0.0),
+                "recent_prices": trade.get("recent_prices", []),
+                "headlines":     trade.get("headlines", []),
+            }
 
     open_tickers = {p.symbol for p in positions}
 
@@ -147,7 +156,7 @@ def main():
             "pnl":        float(p.unrealized_pl),
             "pnl_pct":    float(p.unrealized_plpc) * 100,
             "stop_price": stop_price_map.get(p.symbol),
-            "reasoning":  reasoning_map.get(p.symbol, ""),
+            "reasoning":  context_map.get(p.symbol, {}).get("reasoning", ""),
         })
 
     def _pair_trades(entries, exits_by_ticker, direction: str) -> list[dict]:
@@ -157,6 +166,7 @@ def main():
             ticker = entry.symbol
             if ticker in open_tickers:
                 continue
+            ctx = context_map.get(ticker, {})
             exit_list = exits_by_ticker.get(ticker, [])
             idx = cursor[ticker]
             paired = None
@@ -174,14 +184,22 @@ def main():
                 realized_pnl = (entry_price - exit_price) * qty if exit_price else None
             ts = entry.filled_at.strftime("%Y-%m-%d %H:%M") if entry.filled_at else ""
             result.append({
-                "ticker":    ticker,
-                "direction": direction,
-                "entry":     entry_price,
-                "exit":      exit_price,
-                "qty":       qty,
-                "pnl":       realized_pnl,
-                "reasoning": reasoning_map.get(ticker, ""),
-                "timestamp": ts,
+                "ticker":        ticker,
+                "direction":     direction,
+                "entry":         entry_price,
+                "exit":          exit_price,
+                "qty":           qty,
+                "pnl":           realized_pnl,
+                "reasoning":     ctx.get("reasoning", ""),
+                "signals":       ctx.get("signals", []),
+                "atr":           ctx.get("atr", 0.0),
+                "trail_pct":     ctx.get("trail_pct", 0.0),
+                "market_regime": ctx.get("market_regime", ""),
+                "spy_perf_5d":   ctx.get("spy_perf_5d", 0.0),
+                "recent_prices": ctx.get("recent_prices", []),
+                "headlines":     ctx.get("headlines", []),
+                "review":        None,
+                "timestamp":     ts,
             })
         return result
 
@@ -198,6 +216,13 @@ def main():
         max_per_run=5,
     )
     all_reviews = existing_reviews + [r.to_dict() for r in new_reviews]
+
+    # Reviews map — dernière review par ticker
+    reviews_map: dict[str, dict] = {}
+    for r in all_reviews:
+        reviews_map[r["ticker"]] = r
+    for trade in closed_trades:
+        trade["review"] = reviews_map.get(trade["ticker"])
 
     won  = sum(1 for c in closed_trades if c["pnl"] is not None and c["pnl"] > 0)
     lost = sum(1 for c in closed_trades if c["pnl"] is not None and c["pnl"] <= 0)

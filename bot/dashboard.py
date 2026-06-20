@@ -113,6 +113,60 @@ def _render_reviews_section(reviews: list[dict]) -> str:
     return kpis + lessons_block + table
 
 
+def _render_trade_detail(c: dict) -> str:
+    """Génère le HTML du panneau de détail pour un trade clôturé."""
+    regime    = c.get("market_regime", "")
+    spy_perf  = c.get("spy_perf_5d", 0.0)
+    atr       = c.get("atr", 0.0)
+    trail_pct = c.get("trail_pct", 0.0)
+    signals   = c.get("signals", [])
+    headlines = c.get("headlines", [])
+    prices    = c.get("recent_prices", [])
+
+    regime_color = {"BULL": "#3fb950", "BEAR": "#f85149", "NEUTRAL": "#d29922"}.get(regime, "#8b949e")
+
+    signals_html   = "".join(f'<span class="badge exp" style="margin:1px 2px;font-size:.72em">{s}</span>' for s in signals) or "—"
+    headlines_html = "".join(f'<div style="margin:2px 0">• {h[:80]}{"…" if len(h)>80 else ""}</div>' for h in headlines[:3]) or "—"
+    prices_str     = " → ".join(f"{p:.2f}" for p in prices[-5:]) if prices else "—"
+
+    decision_block = f"""
+<div class="detail-section">
+  <h4>Contexte de décision</h4>
+  <div class="detail-item">Régime : <strong style="color:{regime_color}">{regime or "—"}</strong> (SPY 5j : {spy_perf:+.1f}%)</div>
+  <div class="detail-item">ATR : <strong>{atr:.2f}</strong> | Trailing stop : <strong>{trail_pct:.1f}%</strong></div>
+  <div class="detail-item">Signaux : {signals_html}</div>
+  <div class="detail-item" style="margin-top:6px">Prix récents : <strong style="font-family:monospace">{prices_str}</strong></div>
+  <div class="detail-item" style="margin-top:6px">Headlines :<br>{headlines_html}</div>
+</div>"""
+
+    review = c.get("review")
+    if review:
+        verdict = review.get("verdict", "")
+        lesson  = review.get("lesson", "")
+        review_block = f"""
+<div class="detail-section">
+  <h4>Review LLM</h4>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <span>Signal : {_score_badge(review.get("signal_score", 0))}</span>
+    <span>Timing : {_score_badge(review.get("timing_score", 0))}</span>
+    <span>Sizing : {_score_badge(review.get("sizing_score", 0))}</span>
+    <span>Global : {_score_badge(review.get("overall", 0))}</span>
+  </div>
+  <div class="detail-item">{verdict}</div>
+  <div class="detail-item" style="margin-top:8px;padding:8px;background:#0d1117;border-radius:6px;color:#d29922">
+    <strong>Leçon :</strong> {lesson}
+  </div>
+</div>"""
+    else:
+        review_block = """
+<div class="detail-section">
+  <h4>Review LLM</h4>
+  <div class="detail-item" style="color:#8b949e;font-style:italic">Pas encore analysé</div>
+</div>"""
+
+    return f'<div class="detail-panel">{decision_block}{review_block}</div>'
+
+
 def render_dashboard(
     positions: list[dict],
     closed_trades: list[dict],
@@ -206,8 +260,10 @@ def render_dashboard(
         direction = c.get("direction", "LONG")
         dir_badge = '<span class="badge short-badge">SHORT</span>' if direction == "SHORT" else '<span class="badge long-badge">LONG</span>'
 
+        detail_id = f"detail-{c['ticker']}-{c.get('timestamp','').replace(' ','-').replace(':','')}"
+        detail_html = _render_trade_detail(c)
         closed_rows += f"""
-<tr>
+<tr class="clickable-row" onclick="toggleDetail('{detail_id}')">
   <td>{c.get("timestamp", "")}</td>
   <td><strong>{c["ticker"]}</strong> {dir_badge}</td>
   <td>{entry_str}</td>
@@ -216,6 +272,9 @@ def render_dashboard(
   <td>{pnl_str}</td>
   <td>{badge}</td>
   <td style="color:#8b949e;font-size:.82em;max-width:260px">{expl}</td>
+</tr>
+<tr class="detail-row" id="{detail_id}">
+  <td colspan="8">{detail_html}</td>
 </tr>"""
 
     if not closed_rows:
@@ -251,6 +310,15 @@ def render_dashboard(
   .badge.exp        {{ background: #2a2a1a; color: #d29922; }}
   .badge.long-badge {{ background: #1a2a3a; color: #58a6ff; }}
   .badge.short-badge{{ background: #2a1a3a; color: #bc8cff; }}
+  .detail-row {{ display:none; }}
+  .detail-row td {{ padding:0; border-bottom:1px solid #21262d; }}
+  .detail-panel {{ background:#161b22; padding:16px 20px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
+  .detail-section {{ }}
+  .detail-section h4 {{ color:#58a6ff; font-size:.8em; text-transform:uppercase; letter-spacing:.4px; margin-bottom:8px; }}
+  .detail-item {{ margin-bottom:6px; font-size:.82em; color:#8b949e; }}
+  .detail-item strong {{ color:#e6edf3; }}
+  .clickable-row {{ cursor:pointer; }}
+  .clickable-row:hover td {{ background:#1c2128; }}
   .footer {{ text-align: center; padding: 24px; color: #8b949e; font-size: .78em; }}
 </style>
 </head>
@@ -335,5 +403,11 @@ def render_dashboard(
 <div class="footer">
   Généré le {now} UTC &bull; Paper Trading Alpaca &bull; Tous les ordres sont fictifs à but éducatif.
 </div>
+<script>
+function toggleDetail(id) {{
+  var row = document.getElementById(id);
+  row.style.display = row.style.display === 'table-row' ? 'none' : 'table-row';
+}}
+</script>
 </body>
 </html>"""

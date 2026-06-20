@@ -115,13 +115,14 @@ def _fetch_enriched(trade: dict) -> dict:
     spy_entry   = 0.0
     try:
         spy_start = (entry_dt - timedelta(days=8)).strftime("%Y-%m-%d")
-        spy_df = yf.download("SPY", start=spy_start, end=end, interval="1d",
+        spy_end   = (entry_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+        spy_df = yf.download("SPY", start=spy_start, end=spy_end, interval="1d",
                               progress=False, auto_adjust=True)
         if not spy_df.empty:
             if hasattr(spy_df.columns, "get_level_values"):
                 spy_df.columns = spy_df.columns.get_level_values(0)
             close = spy_df["Close"]
-            spy_entry   = float(close.iloc[-1])
+            spy_entry   = float(close.iloc[-1])  # last close in window around entry date
             spy_perf_5d = float((close.iloc[-1] - close.iloc[-6]) / close.iloc[-6] * 100) if len(close) >= 6 else 0.0
     except Exception:
         pass
@@ -142,10 +143,17 @@ def _fetch_enriched(trade: dict) -> dict:
     }
 
 
-def _call_llm(trade: dict, enriched: dict, groq_api_key: str) -> TradeReview | None:
+def _call_llm(trade: dict, enriched: dict, client: Groq) -> TradeReview | None:
     """Appelle Groq pour analyser un trade. Retourne None en cas d'échec."""
     pnl = trade.get("pnl")
-    pnl_str = f"+${pnl:.2f}" if (pnl and pnl > 0) else (f"-${abs(pnl):.2f}" if pnl else "inconnu")
+    if pnl is None:
+        pnl_str = "inconnu"
+    elif pnl > 0:
+        pnl_str = f"+${pnl:.2f}"
+    elif pnl < 0:
+        pnl_str = f"-${abs(pnl):.2f}"
+    else:
+        pnl_str = "$0.00 (breakeven)"
 
     headlines_str = "\n".join(f"- {h}" for h in enriched["headlines"]) or "Aucune news haute impact disponible"
 
@@ -165,7 +173,6 @@ def _call_llm(trade: dict, enriched: dict, groq_api_key: str) -> TradeReview | N
         headlines=headlines_str,
     )
 
-    client = Groq(api_key=groq_api_key)
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
@@ -211,6 +218,7 @@ def review_pending_trades(
     if not groq_key:
         print("[reviewer] No groq_api_key in config, skipping review")
         return []
+    client = Groq(api_key=groq_key)
 
     reviewed_keys = {
         (r["ticker"], r["entry_ts"])
@@ -227,7 +235,7 @@ def review_pending_trades(
     for trade in pending:
         print(f"[reviewer] Reviewing {trade['ticker']} ({trade.get('timestamp', '')})...")
         enriched = _fetch_enriched(trade)
-        review   = _call_llm(trade, enriched, groq_key)
+        review   = _call_llm(trade, enriched, client)
         if review:
             results.append(review)
             print(f"[reviewer] Done: overall={review.overall}/10")

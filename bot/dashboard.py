@@ -1,3 +1,4 @@
+import html
 from datetime import datetime, timezone
 
 
@@ -67,7 +68,7 @@ def _render_reviews_section(reviews: list[dict]) -> str:
 
     lessons_html = "".join(
         f'<li style="padding:6px 0;border-bottom:1px solid #21262d;color:#e6edf3">'
-        f'<span style="color:#8b949e;font-size:.8em">{r.get("entry_ts","")[:10]} {r.get("ticker","")}</span> — {r["lesson"]}</li>'
+        f'<span style="color:#8b949e;font-size:.8em">{r.get("entry_ts","")[:10]} {r.get("ticker","")}</span> — {html.escape(r["lesson"])}</li>'
         for r in recent[:10] if r.get("lesson")
     )
     lessons_block = f"""
@@ -83,7 +84,7 @@ def _render_reviews_section(reviews: list[dict]) -> str:
         pnl = r.get("pnl")
         pnl_color = "#3fb950" if (pnl and pnl > 0) else "#f85149"
         pnl_str   = f'<span style="color:{pnl_color};font-weight:600">{"+" if pnl and pnl > 0 else ""}${pnl:.2f}</span>' if pnl is not None else "—"
-        verdict   = r.get("verdict", "")
+        verdict   = html.escape(r.get("verdict", ""))
         short_v   = (verdict[:120] + "…") if len(verdict) > 120 else verdict
         rows += f"""
 <tr>
@@ -126,7 +127,10 @@ def _render_trade_detail(c: dict) -> str:
     regime_color = {"BULL": "#3fb950", "BEAR": "#f85149", "NEUTRAL": "#d29922"}.get(regime, "#8b949e")
 
     signals_html   = "".join(f'<span class="badge exp" style="margin:1px 2px;font-size:.72em">{s}</span>' for s in signals) or "—"
-    headlines_html = "".join(f'<div style="margin:2px 0">• {h[:80]}{"…" if len(h)>80 else ""}</div>' for h in headlines[:3]) or "—"
+    headlines_html = "".join(
+        f'<div style="margin:2px 0">• {html.escape(h[:80])}{"…" if len(h)>80 else ""}</div>'
+        for h in headlines[:3]
+    ) or "—"
     prices_str     = " → ".join(f"{p:.2f}" for p in prices[-5:]) if prices else "—"
 
     decision_block = f"""
@@ -141,8 +145,8 @@ def _render_trade_detail(c: dict) -> str:
 
     review = c.get("review")
     if review:
-        verdict = review.get("verdict", "")
-        lesson  = review.get("lesson", "")
+        verdict = html.escape(review.get("verdict", ""))
+        lesson  = html.escape(review.get("lesson", ""))
         review_block = f"""
 <div class="detail-section">
   <h4>Review LLM</h4>
@@ -225,7 +229,7 @@ def render_dashboard(
             action_html = f'<span class="badge exp">{action}</span>'
         else:
             action_html = f'<span style="color:#8b949e">{action}</span>'
-        reasoning = a.get("reasoning", "")
+        reasoning = html.escape(a.get("reasoning", ""))
         short_r = (reasoning[:150] + "…") if len(reasoning) > 150 else reasoning
         analyses_rows += f"""
 <tr>

@@ -29,11 +29,97 @@ def _perf_explanation(trade: dict) -> str:
     return msg
 
 
+def _score_badge(score: int) -> str:
+    if score >= 7:
+        color = "#3fb950"
+        bg    = "#1a3a1a"
+    elif score >= 4:
+        color = "#d29922"
+        bg    = "#2a2a1a"
+    else:
+        color = "#f85149"
+        bg    = "#3a1a1a"
+    return f'<span class="badge" style="background:{bg};color:{color}">{score}/10</span>'
+
+
+def _render_reviews_section(reviews: list[dict]) -> str:
+    if not reviews:
+        return ""
+
+    recent = sorted(reviews, key=lambda r: r.get("entry_ts", ""), reverse=True)[:30]
+
+    def avg(key):
+        vals = [r[key] for r in recent if key in r]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    avg_signal  = avg("signal_score")
+    avg_timing  = avg("timing_score")
+    avg_sizing  = avg("sizing_score")
+    avg_overall = avg("overall")
+
+    kpis = f"""
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+  <div class="kpi"><div class="label">Signal moyen</div><div class="value" style="font-size:1.2em;color:#58a6ff">{avg_signal:.1f}/10</div></div>
+  <div class="kpi"><div class="label">Timing moyen</div><div class="value" style="font-size:1.2em;color:#58a6ff">{avg_timing:.1f}/10</div></div>
+  <div class="kpi"><div class="label">Sizing moyen</div><div class="value" style="font-size:1.2em;color:#58a6ff">{avg_sizing:.1f}/10</div></div>
+  <div class="kpi"><div class="label">Note globale</div><div class="value" style="font-size:1.2em;color:#d29922">{avg_overall:.1f}/10</div></div>
+</div>"""
+
+    lessons = [r["lesson"] for r in recent[:10] if r.get("lesson")]
+    lessons_html = "".join(
+        f'<li style="padding:6px 0;border-bottom:1px solid #21262d;color:#e6edf3">'
+        f'<span style="color:#8b949e;font-size:.8em">{r.get("entry_ts","")[:10]} {r.get("ticker","")}</span> — {r["lesson"]}</li>'
+        for r, l in zip(recent[:10], lessons)
+    )
+    lessons_block = f"""
+<div style="background:#161b22;border:1px solid #21262d;border-radius:10px;padding:16px 20px;margin-bottom:20px">
+  <div style="font-weight:700;color:#d29922;margin-bottom:10px">Leçons apprises (10 derniers trades)</div>
+  <ul style="list-style:none;padding:0;margin:0">{lessons_html}</ul>
+</div>"""
+
+    rows = ""
+    for r in recent:
+        direction = r.get("direction", "LONG")
+        dir_badge = '<span class="badge short-badge">SHORT</span>' if direction == "SHORT" else '<span class="badge long-badge">LONG</span>'
+        pnl = r.get("pnl")
+        pnl_color = "#3fb950" if (pnl and pnl > 0) else "#f85149"
+        pnl_str   = f'<span style="color:{pnl_color};font-weight:600">{"+" if pnl and pnl > 0 else ""}${pnl:.2f}</span>' if pnl is not None else "—"
+        verdict   = r.get("verdict", "")
+        short_v   = (verdict[:120] + "…") if len(verdict) > 120 else verdict
+        rows += f"""
+<tr>
+  <td style="white-space:nowrap;color:#8b949e">{r.get("entry_ts","")[:10]}</td>
+  <td><strong>{r.get("ticker","")}</strong> {dir_badge}</td>
+  <td>{pnl_str}</td>
+  <td>{_score_badge(r.get("signal_score", 0))}</td>
+  <td>{_score_badge(r.get("timing_score", 0))}</td>
+  <td>{_score_badge(r.get("sizing_score", 0))}</td>
+  <td>{_score_badge(r.get("overall", 0))}</td>
+  <td style="color:#8b949e;font-size:.82em">{short_v}</td>
+</tr>"""
+
+    table = f"""
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Date</th><th>Actif</th><th>PnL</th>
+      <th>Signal</th><th>Timing</th><th>Sizing</th><th>Global</th><th>Verdict</th>
+    </tr>
+  </thead>
+  <tbody>{rows}</tbody>
+</table>
+</div>"""
+
+    return kpis + lessons_block + table
+
+
 def render_dashboard(
     positions: list[dict],
     closed_trades: list[dict],
     analyses: list[dict],
     portfolio: dict,
+    reviews: list[dict] | None = None,
 ) -> str:
     now        = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
     capital    = portfolio.get("capital", 0)
@@ -230,6 +316,8 @@ def render_dashboard(
   <tbody>{closed_rows}</tbody>
 </table>
 </div>
+
+{f'<div class="section-title">Post-Trade Review ({len(reviews)} trades analysés)</div>{_render_reviews_section(reviews)}' if reviews else ''}
 
 <div class="section-title">Journal des Analyses ({len(analyses)})</div>
 <div class="table-wrap">
